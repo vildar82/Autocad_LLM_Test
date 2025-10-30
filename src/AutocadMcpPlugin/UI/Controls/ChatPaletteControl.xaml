@@ -1,11 +1,13 @@
-<UserControl x:Class="AutocadMcpPlugin.UI.Controls.ChatPaletteControl"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d"
-             MinWidth="320"
-             MinHeight="420">
+<UserControl
+    x:Class="AutocadMcpPlugin.UI.Controls.ChatPaletteControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:viewModels="clr-namespace:AutocadMcpPlugin.UI.ViewModels"
+    MinWidth="320" MinHeight="420"
+    d:DataContext="{d:DesignInstance viewModels:ChatViewModel}"
+    mc:Ignorable="d">
     <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -14,23 +16,22 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Чат ассистента MCP" FontWeight="Bold" FontSize="16" />
+        <TextBlock
+            FontSize="16" FontWeight="Bold"
+            Text="Чат ассистента MCP" />
 
-        <Border Grid.Row="1"
-                Margin="0,12,0,12"
-                BorderBrush="#FFD0D0D0"
-                BorderThickness="1"
-                CornerRadius="4"
-                Background="#FFF7F7F7">
+        <Border
+            Grid.Row="1"
+            Margin="0,12,0,12"
+            Background="#FFF7F7F7" BorderBrush="#FFD0D0D0"
+            BorderThickness="1" CornerRadius="4">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding Messages}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Margin="8,4">
-                                <TextBlock Text="{Binding Author}"
-                                           FontWeight="Bold" />
-                                <TextBlock Text="{Binding Text}"
-                                           TextWrapping="Wrap" />
+                                <TextBlock FontWeight="Bold" Text="{Binding Author}" />
+                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
                             </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -38,26 +39,27 @@
             </ScrollViewer>
         </Border>
 
-        <TextBox Grid.Row="2"
-                 MinHeight="60"
-                 TextWrapping="Wrap"
-                 AcceptsReturn="True"
-                 VerticalScrollBarVisibility="Auto"
-                 ToolTip="Опишите, что нужно сделать…"
-                 Text="{Binding UserInput, UpdateSourceTrigger=PropertyChanged}" />
+        <TextBox
+            Grid.Row="2"
+            MinHeight="60"
+            AcceptsReturn="True"
+            Text="{Binding UserInput, UpdateSourceTrigger=PropertyChanged}"
+            TextWrapping="Wrap" ToolTip="Опишите, что нужно сделать…"
+            VerticalScrollBarVisibility="Auto" />
 
-        <StackPanel Grid.Row="3"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Margin="0,8,0,0">
-            <TextBlock Margin="0,0,12,0"
-                       VerticalAlignment="Center"
-                       Foreground="Gray"
-                       Text="{Binding StatusMessage}" />
-            <Button Content="Отправить"
-                    Height="32"
-                    Padding="12,0"
-                    Command="{Binding SendCommand}" />
+        <StackPanel
+            Grid.Row="3"
+            Margin="0,8,0,0" HorizontalAlignment="Right"
+            Orientation="Horizontal">
+            <TextBlock
+                Margin="0,0,12,0" VerticalAlignment="Center"
+                Foreground="Gray"
+                Text="{Binding StatusMessage}" />
+            <Button
+                Height="32"
+                Padding="12,0"
+                Command="{Binding SendCommand}"
+                Content="Отправить" />
         </StackPanel>
     </Grid>
 </UserControl>

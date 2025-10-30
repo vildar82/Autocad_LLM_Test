@@ -1,9 +1,9 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
-using AutocadMcpPlugin.Application.Conversations;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using AutocadMcpPlugin.Application.Conversations;
 
 namespace AutocadMcpPlugin.UI.ViewModels;
 
@@ -20,7 +20,7 @@ public sealed partial class ChatViewModel : ObservableObject
         Messages = [];
     }
 
-    public ObservableCollection<ChatMessageViewModel> Messages { get; }
+    public ObservableCollection<ChatMessage> Messages { get; }
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SendCommand))]
@@ -38,26 +38,24 @@ public sealed partial class ChatViewModel : ObservableObject
     {
         var message = UserInput.Trim();
         if (string.IsNullOrWhiteSpace(message))
-        {
             return;
-        }
 
         try
         {
             IsBusy = true;
             StatusMessage = "Обрабатываю запрос…";
 
-            Messages.Add(new ChatMessageViewModel("Вы", message));
+            Messages.Add(new ChatMessage("Вы", message));
             UserInput = string.Empty;
 
             var response = await _conversationCoordinator.ProcessUserMessageAsync(message);
-            Messages.Add(new ChatMessageViewModel("Ассистент", response));
+            Messages.Add(new ChatMessage("Ассистент", response));
 
             StatusMessage = "Готово.";
         }
         catch (Exception ex)
         {
-            Messages.Add(new ChatMessageViewModel("Система", $"Ошибка: {ex.Message}"));
+            Messages.Add(new ChatMessage("Система", $"Ошибка: {ex.Message}"));
             StatusMessage = "Возникла ошибка.";
         }
         finally
@@ -66,8 +64,5 @@ public sealed partial class ChatViewModel : ObservableObject
         }
     }
 
-    private bool CanSend()
-    {
-        return !IsBusy && !string.IsNullOrWhiteSpace(UserInput);
-    }
+    private bool CanSend() => !IsBusy && !string.IsNullOrWhiteSpace(UserInput);
 }

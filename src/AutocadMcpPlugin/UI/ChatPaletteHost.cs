@@ -7,7 +7,7 @@ using AutocadMcpPlugin.UI.ViewModels;
 namespace AutocadMcpPlugin.UI;
 
 /// <summary>
-/// Отвечает за создание и отображение палитры чата в AutoCAD.
+/// Управляет жизненным циклом палитры чата внутри AutoCAD.
 /// </summary>
 public sealed class ChatPaletteHost : IDisposable
 {
@@ -39,9 +39,7 @@ public sealed class ChatPaletteHost : IDisposable
     public void Show()
     {
         if (_disposed)
-        {
             throw new ObjectDisposedException(nameof(ChatPaletteHost));
-        }
 
         _paletteSet.Visible = true;
     }
@@ -52,17 +50,12 @@ public sealed class ChatPaletteHost : IDisposable
         _instance = null;
     }
 
-    public void Dispose()
-    {
-        DisposeCore();
-    }
+    public void Dispose() => DisposeCore();
 
     private void DisposeCore()
     {
         if (_disposed)
-        {
             return;
-        }
 
         _disposed = true;
         _control.ViewModel = null;

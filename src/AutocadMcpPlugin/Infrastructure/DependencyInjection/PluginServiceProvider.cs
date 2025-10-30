@@ -16,10 +16,10 @@ public static class PluginServiceProvider
     /// <summary>
     /// Доступ к построенному контейнеру.
     /// </summary>
-    public static IServiceProvider Services =>
+    private static IServiceProvider Services =>
         _serviceProvider ?? throw new InvalidOperationException("Контейнер зависимостей плагина не инициализирован.");
 
-    public static bool IsInitialized => _serviceProvider is not null;
+    private static bool IsInitialized => _serviceProvider is not null;
 
     /// <summary>
     /// Запускает инициализацию контейнера и регистрирует сервисы.
@@ -27,16 +27,12 @@ public static class PluginServiceProvider
     public static void Initialize()
     {
         if (IsInitialized)
-        {
             return;
-        }
 
         lock (SyncRoot)
         {
             if (IsInitialized)
-            {
                 return;
-            }
 
             var services = new ServiceCollection();
             ConfigureServices(services);
@@ -60,10 +56,7 @@ public static class PluginServiceProvider
     /// <summary>
     /// Унифицированный способ получения сервисов.
     /// </summary>
-    public static T GetRequiredService<T>() where T : notnull
-    {
-        return Services.GetRequiredService<T>();
-    }
+    public static T GetRequiredService<T>() where T : notnull => Services.GetRequiredService<T>();
 
     private static void ConfigureServices(IServiceCollection services)
     {
