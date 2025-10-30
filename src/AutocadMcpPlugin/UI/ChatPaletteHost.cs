@@ -1,5 +1,7 @@
 using System;
 using Autodesk.AutoCAD.Windows;
+using AutocadMcpPlugin.Application.Conversations;
+using AutocadMcpPlugin.Infrastructure.DependencyInjection;
 using AutocadMcpPlugin.UI.Controls;
 
 namespace AutocadMcpPlugin.UI;
@@ -40,10 +42,22 @@ public sealed class ChatPaletteHost : IDisposable
         _paletteSet.Visible = true;
     }
 
-    private void OnSendRequested(object? sender, string message)
+    private async void OnSendRequested(object? sender, string message)
     {
-        // Простая заглушка до внедрения логики LLM/MCP.
-        _control.AppendMessage("Ассистент", $"Получено сообщение: {message}");
+        if (_disposed)
+            return;
+
+        try
+        {
+            var coordinator = PluginServiceProvider.GetRequiredService<IConversationCoordinator>();
+            var response = await coordinator.ProcessUserMessageAsync(message);
+
+            _control.AppendMessage("Ассистент", response);
+        }
+        catch (Exception ex)
+        {
+            _control.AppendMessage("Система", $"Ошибка: {ex.Message}");
+        }
     }
 
     public static void DisposeInstance()

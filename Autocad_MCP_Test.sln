@@ -7,6 +7,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFolder", "SolutionF
 	ProjectSection(SolutionItems) = preProject
 		plan.md = plan.md
 		docs\README.md = docs\README.md
+		rules.md = rules.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutocadMcpPlugin", "src\AutocadMcpPlugin\AutocadMcpPlugin.csproj", "{24629497-3950-47DE-91B5-9905BAABDA8F}"

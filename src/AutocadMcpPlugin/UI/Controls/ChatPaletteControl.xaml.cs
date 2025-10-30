@@ -5,9 +5,9 @@ using System.Windows.Controls;
 namespace AutocadMcpPlugin.UI.Controls;
 
 /// <summary>
-/// Простая палитра чата для первоначального взаимодействия с пользователем.
+/// Простейшая палитра чата для начального взаимодействия пользователя с ассистентом.
 /// </summary>
-public partial class ChatPaletteControl : UserControl
+public partial class ChatPaletteControl
 {
     public ChatPaletteControl()
     {
@@ -24,7 +24,13 @@ public partial class ChatPaletteControl : UserControl
     /// </summary>
     public void AppendMessage(string author, string message)
     {
-        // Простейшее форматирование сообщения.
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(() => AppendMessage(author, message));
+            return;
+        }
+
+        // Простейшее форматирование сообщения в истории.
         var textBlock = new TextBlock
         {
             Text = $"{author}: {message}",
@@ -39,9 +45,7 @@ public partial class ChatPaletteControl : UserControl
     {
         var text = PromptTextBox.Text.Trim();
         if (string.IsNullOrEmpty(text))
-        {
             return;
-        }
 
         AppendMessage("Вы", text);
         PromptTextBox.Clear();

@@ -1,4 +1,5 @@
 using Autodesk.AutoCAD.Runtime;
+using AutocadMcpPlugin.Infrastructure.DependencyInjection;
 using AutocadMcpPlugin.UI;
 
 namespace AutocadMcpPlugin.Plugin;
@@ -8,16 +9,18 @@ namespace AutocadMcpPlugin.Plugin;
 /// </summary>
 public sealed class PluginEntry : IExtensionApplication
 {
-    // TODO: заменить на полноценный логгер после интеграции с инфраструктурой.
+    // TODO: заменить на интеграцию с полноценным журналированием.
 
     public void Initialize()
     {
+        PluginServiceProvider.Initialize();
         System.Diagnostics.Debug.WriteLine("MCP плагин инициализирован.");
     }
 
     public void Terminate()
     {
         ChatPaletteHost.DisposeInstance();
+        PluginServiceProvider.Dispose();
         System.Diagnostics.Debug.WriteLine("MCP плагин выгружен.");
     }
 }
