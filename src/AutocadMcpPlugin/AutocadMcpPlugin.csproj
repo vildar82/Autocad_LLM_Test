@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net48</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+        <UseWpf>true</UseWpf>
+        <Optimize>false</Optimize>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AutoCAD2019.Base" Version="1.0.3" ExcludeAssets="runtime;build"/>
+    </ItemGroup>
+
+    <ItemGroup Label="Documentation">
+        <None Include="..\..\plan.md" Pack="false"/>
+    </ItemGroup>
+
+</Project>
