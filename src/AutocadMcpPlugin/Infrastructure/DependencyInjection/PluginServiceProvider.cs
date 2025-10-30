@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using AutocadMcpPlugin.Application.Commands;
 using AutocadMcpPlugin.Application.Conversations;
 using AutocadMcpPlugin.UI.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,16 +14,13 @@ public static class PluginServiceProvider
     private static ServiceProvider? _serviceProvider;
     private static readonly object SyncRoot = new();
 
-    /// <summary>
-    /// Доступ к построенному контейнеру.
-    /// </summary>
     private static IServiceProvider Services =>
         _serviceProvider ?? throw new InvalidOperationException("Контейнер зависимостей плагина не инициализирован.");
 
     private static bool IsInitialized => _serviceProvider is not null;
 
     /// <summary>
-    /// Запускает инициализацию контейнера и регистрирует сервисы.
+    /// Выполняет инициализацию контейнера и регистрирует сервисы.
     /// </summary>
     public static void Initialize()
     {
@@ -60,10 +58,8 @@ public static class PluginServiceProvider
 
     private static void ConfigureServices(IServiceCollection services)
     {
-        // Координатор диалога пока работает как заглушка, далее подключим связку LLM/MCP.
+        services.AddSingleton<IAutocadCommandExecutor, AutocadCommandExecutor>();
         services.AddSingleton<IConversationCoordinator, ConversationCoordinator>();
-
-        // ViewModel палитры чата регистрируем в контейнере, чтобы переиспользовать состояние.
         services.AddSingleton<ChatViewModel>();
     }
 }
