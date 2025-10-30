@@ -9,7 +9,7 @@ namespace AutocadMcpPlugin.Plugin;
 /// </summary>
 public sealed class PluginEntry : IExtensionApplication
 {
-    // TODO: заменить на интеграцию с полноценным журналированием.
+    // TODO: заменить вывод в отладку на централизованное логирование.
 
     public void Initialize()
     {
@@ -26,7 +26,7 @@ public sealed class PluginEntry : IExtensionApplication
 }
 
 /// <summary>
-/// Базовая коллекция команд плагина.
+/// Набор команд плагина.
 /// </summary>
 public static class PluginCommands
 {

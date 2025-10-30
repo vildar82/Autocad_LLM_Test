@@ -4,14 +4,14 @@ using System.Threading.Tasks;
 namespace AutocadMcpPlugin.Application.Conversations;
 
 /// <summary>
-/// Базовая заглушка координатора диалогов.
+/// Базовая заглушка, координирующая диалог до подключения LLM/MCP.
 /// </summary>
 public sealed class ConversationCoordinator : IConversationCoordinator
 {
-    // TODO: подключить LLM и MCP; пока возвращаем предустановленный ответ.
+    // TODO: заменить на вызовы LLM и MCP, как только будут готовы интеграции.
     public Task<string> ProcessUserMessageAsync(string message, CancellationToken cancellationToken = default)
     {
-        var reply = $"Пока не подключено к LLM. Вы попросили: \"{message}\".";
+        var reply = $"Пока нет связи с LLM. Вы запросили: \"{message}\".";
         return Task.FromResult(reply);
     }
 }

@@ -1,13 +1,13 @@
 using System;
 using Autodesk.AutoCAD.Windows;
-using AutocadMcpPlugin.Application.Conversations;
 using AutocadMcpPlugin.Infrastructure.DependencyInjection;
 using AutocadMcpPlugin.UI.Controls;
+using AutocadMcpPlugin.UI.ViewModels;
 
 namespace AutocadMcpPlugin.UI;
 
 /// <summary>
-/// Управляет жизненным циклом палитры чата внутри AutoCAD.
+/// Отвечает за создание и отображение палитры чата в AutoCAD.
 /// </summary>
 public sealed class ChatPaletteHost : IDisposable
 {
@@ -18,8 +18,10 @@ public sealed class ChatPaletteHost : IDisposable
 
     private ChatPaletteHost()
     {
-        _control = new ChatPaletteControl();
-        _control.SendRequested += OnSendRequested;
+        _control = new ChatPaletteControl
+        {
+            ViewModel = PluginServiceProvider.GetRequiredService<ChatViewModel>()
+        };
 
         _paletteSet = new PaletteSet("MCP Assistant")
         {
@@ -37,27 +39,11 @@ public sealed class ChatPaletteHost : IDisposable
     public void Show()
     {
         if (_disposed)
+        {
             throw new ObjectDisposedException(nameof(ChatPaletteHost));
+        }
 
         _paletteSet.Visible = true;
-    }
-
-    private async void OnSendRequested(object? sender, string message)
-    {
-        if (_disposed)
-            return;
-
-        try
-        {
-            var coordinator = PluginServiceProvider.GetRequiredService<IConversationCoordinator>();
-            var response = await coordinator.ProcessUserMessageAsync(message);
-
-            _control.AppendMessage("Ассистент", response);
-        }
-        catch (Exception ex)
-        {
-            _control.AppendMessage("Система", $"Ошибка: {ex.Message}");
-        }
     }
 
     public static void DisposeInstance()
@@ -66,15 +52,20 @@ public sealed class ChatPaletteHost : IDisposable
         _instance = null;
     }
 
-    public void Dispose() => DisposeCore();
+    public void Dispose()
+    {
+        DisposeCore();
+    }
 
     private void DisposeCore()
     {
         if (_disposed)
+        {
             return;
+        }
 
         _disposed = true;
-        _control.SendRequested -= OnSendRequested;
+        _control.ViewModel = null;
         _paletteSet.Dispose();
     }
 }

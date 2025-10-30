@@ -11,6 +11,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBlock Text="Чат ассистента MCP" FontWeight="Bold" FontSize="16" />
@@ -22,23 +23,41 @@
                 CornerRadius="4"
                 Background="#FFF7F7F7">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel Margin="8" x:Name="HistoryPanel" />
+                <ItemsControl ItemsSource="{Binding Messages}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="8,4">
+                                <TextBlock Text="{Binding Author}"
+                                           FontWeight="Bold" />
+                                <TextBlock Text="{Binding Text}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </ScrollViewer>
         </Border>
 
-        <StackPanel Grid.Row="2">
-            <TextBox x:Name="PromptTextBox"
-                     MinHeight="60"
-                     TextWrapping="Wrap"
-                     AcceptsReturn="True"
-                     VerticalScrollBarVisibility="Auto"
-                     ToolTip="Опишите, что нужно сделать…" />
-            <Button Content="Отправить"
-                    Margin="0,8,0,0"
-                    Height="32"
+        <TextBox Grid.Row="2"
+                 MinHeight="60"
+                 TextWrapping="Wrap"
+                 AcceptsReturn="True"
+                 VerticalScrollBarVisibility="Auto"
+                 ToolTip="Опишите, что нужно сделать…"
+                 Text="{Binding UserInput, UpdateSourceTrigger=PropertyChanged}" />
+
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
                     HorizontalAlignment="Right"
+                    Margin="0,8,0,0">
+            <TextBlock Margin="0,0,12,0"
+                       VerticalAlignment="Center"
+                       Foreground="Gray"
+                       Text="{Binding StatusMessage}" />
+            <Button Content="Отправить"
+                    Height="32"
                     Padding="12,0"
-                    Click="OnSendClicked" />
+                    Command="{Binding SendCommand}" />
         </StackPanel>
     </Grid>
 </UserControl>

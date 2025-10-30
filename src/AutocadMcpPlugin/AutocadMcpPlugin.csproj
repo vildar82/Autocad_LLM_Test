@@ -2,31 +2,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net472</TargetFramework>
+    <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <UseWpf>true</UseWpf>
-    <AutoCAD2019Root Condition="'$(AutoCAD2019Root)'==''">C:\Program Files\Autodesk\AutoCAD 2019</AutoCAD2019Root>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="AutoCAD2019.Base" Version="1.0.3">
+      <ExcludeAssets>runtime;build</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="AcCoreMgd">
-      <HintPath>$(AutoCAD2019Root)\AcCoreMgd.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="AcDbMgd">
-      <HintPath>$(AutoCAD2019Root)\AcDbMgd.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="AcMgd">
-      <HintPath>$(AutoCAD2019Root)\AcMgd.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
   </ItemGroup>
 
   <ItemGroup Label="Documentation">

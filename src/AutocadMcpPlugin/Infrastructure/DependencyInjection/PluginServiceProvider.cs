@@ -1,6 +1,7 @@
 using System;
-using Microsoft.Extensions.DependencyInjection;
 using AutocadMcpPlugin.Application.Conversations;
+using AutocadMcpPlugin.UI.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AutocadMcpPlugin.Infrastructure.DependencyInjection;
 
@@ -26,15 +27,20 @@ public static class PluginServiceProvider
     public static void Initialize()
     {
         if (IsInitialized)
+        {
             return;
+        }
 
         lock (SyncRoot)
         {
             if (IsInitialized)
+            {
                 return;
+            }
 
             var services = new ServiceCollection();
             ConfigureServices(services);
+
             _serviceProvider = services.BuildServiceProvider();
         }
     }
@@ -54,11 +60,17 @@ public static class PluginServiceProvider
     /// <summary>
     /// Унифицированный способ получения сервисов.
     /// </summary>
-    public static T GetRequiredService<T>() where T : notnull => Services.GetRequiredService<T>();
+    public static T GetRequiredService<T>() where T : notnull
+    {
+        return Services.GetRequiredService<T>();
+    }
 
     private static void ConfigureServices(IServiceCollection services)
     {
-        // Регистрация координатора диалога (заглушка, будет расширяться по мере внедрения MCP/LLM).
+        // Координатор диалога пока работает как заглушка, далее подключим связку LLM/MCP.
         services.AddSingleton<IConversationCoordinator, ConversationCoordinator>();
+
+        // ViewModel палитры чата регистрируем в контейнере, чтобы переиспользовать состояние.
+        services.AddSingleton<ChatViewModel>();
     }
 }
