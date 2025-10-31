@@ -30,4 +30,19 @@ public static class JsonElementExtensions
             _ => throw new InvalidOperationException($"Некорректный формат параметра '{propertyName}'. Ожидалась строка.")
         };
     }
+
+    public static bool ReadOptionalBoolean(this JsonElement element, string propertyName, bool defaultValue)
+    {
+        if (!element.TryGetProperty(propertyName, out var value))
+            return defaultValue;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String => bool.TryParse(value.GetString(), out var parsed) ? parsed : throw new InvalidOperationException($"Некорректный формат параметра '{propertyName}'."),
+            JsonValueKind.Null or JsonValueKind.Undefined => defaultValue,
+            _ => throw new InvalidOperationException($"Некорректный формат параметра '{propertyName}'.")
+        };
+    }
 }

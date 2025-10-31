@@ -54,6 +54,8 @@ public sealed class OpenAiLlmClient : ILlmClient, IDisposable
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
 
+    // Формирует HTTP-запрос к OpenAI Chat Completions, передавая историю и описание инструментов,
+    // и возвращает нормализованный результат (текст / tool-call'ы).
     public async Task<LlmChatResult> CreateChatCompletionAsync(LlmChatRequest request, CancellationToken cancellationToken = default)
     {
         if (request is null)
@@ -135,6 +137,7 @@ public sealed class OpenAiLlmClient : ILlmClient, IDisposable
 
     private object BuildMessagePayload(LlmMessage message)
     {
+        // Подготавливаем структуру для OpenAI: добавляем tool_calls, если они были в истории.
         var toolCalls = message.ToolCalls.Count == 0
             ? null
             : message.ToolCalls.Select(tc => new
@@ -159,6 +162,7 @@ public sealed class OpenAiLlmClient : ILlmClient, IDisposable
 
     private static IReadOnlyList<LlmToolCall> ExtractToolCalls(ToolCallDto[]? toolCalls)
     {
+        // Переводим tool_calls OpenAI в доменную модель с JsonElement аргументами.
         if (toolCalls == null || toolCalls.Length == 0)
             return [];
 
@@ -183,6 +187,7 @@ public sealed class OpenAiLlmClient : ILlmClient, IDisposable
 
     private static JsonElement ParseArguments(string? arguments)
     {
+        // OpenAI присылает аргументы в виде строки JSON — парсим и клонируем корневой элемент.
         var json = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments!;
         using var document = JsonDocument.Parse(json);
         return document.RootElement.Clone();
@@ -190,6 +195,7 @@ public sealed class OpenAiLlmClient : ILlmClient, IDisposable
 
     private static string TryExtractError(string body)
     {
+        // Если OpenAI вернул JSON с описанием ошибки — вытаскиваем message, иначе возвращаем тело целиком.
         try
         {
             var error = JsonSerializer.Deserialize<OpenAiErrorResponse>(body, ResponseJsonOptions);

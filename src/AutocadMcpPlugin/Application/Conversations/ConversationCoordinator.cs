@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -38,6 +37,8 @@ public sealed class ConversationCoordinator(
         GetPolylineToolDefinition()
     ];
 
+    // Основной цикл: фиксируем запрос пользователя, передаем историю и описание инструментов в LLM,
+    // а затем обрабатываем цепочки tool-call(ов), пока ассистент не сформирует текстовый ответ.
     public async Task<string> ProcessUserMessageAsync(string message, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -79,6 +80,7 @@ public sealed class ConversationCoordinator(
 
             if (!string.IsNullOrEmpty(response.Content))
             {
+                // LLM завершила диалог текстом и дополнительных действий не требуется.
                 var finalContent = response.Content!;
                 _history.Add(LlmMessage.CreateAssistant(finalContent));
                 return finalContent;
@@ -94,6 +96,7 @@ public sealed class ConversationCoordinator(
     {
         try
         {
+            // Маршрутизируем вызов в зависимости от имени инструмента.
             return toolCall.Name switch
             {
                 "draw_circle" => ExecuteDrawCircle(toolCall),
@@ -140,7 +143,7 @@ public sealed class ConversationCoordinator(
         if (vertices.Count < 2)
             throw new InvalidOperationException("Для построения полилинии необходимо минимум две вершины.");
 
-        var closed = ReadOptionalBoolean(toolCall.Arguments, "closed", false);
+        var closed = toolCall.Arguments.ReadOptionalBoolean("closed", false);
         var result = commandExecutor.DrawPolyline(vertices, closed);
         return FormatResult(result);
     }
@@ -150,6 +153,7 @@ public sealed class ConversationCoordinator(
         if (!toolCall.Arguments.TryGetProperty("objects", out var objectsElement) || objectsElement.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException("Не найден массив 'objects'.");
 
+        // Пакетное построение: собираем список запросов по каждому элементу массива objects.
         var requests = new List<DrawingObjectRequest>();
         foreach (var objectElement in objectsElement.EnumerateArray())
         {
@@ -180,7 +184,7 @@ public sealed class ConversationCoordinator(
                     if (vertices.Count < 2)
                         throw new InvalidOperationException("Нужно указать минимум две вершины полилинии.");
 
-                    var closed = ReadOptionalBoolean(objectElement, "closed", false);
+                    var closed = objectElement.ReadOptionalBoolean("closed", false);
                     requests.Add(DrawingObjectRequest.ForPolyline(vertices, closed));
                     break;
                 default:
@@ -203,6 +207,7 @@ public sealed class ConversationCoordinator(
         if (!toolCall.Arguments.TryGetProperty("object_ids", out var idsElement) || idsElement.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException("Ожидался массив 'object_ids'.");
 
+        // Приводим Id к строковому виду — исполнитель работает с идентификаторами в форме строки.
         var ids = new List<string>();
         foreach (var idElement in idsElement.EnumerateArray())
         {
@@ -232,6 +237,7 @@ public sealed class ConversationCoordinator(
         return FormatResult(result);
     }
 
+    // Преобразует JSON-описание вершин в коллекцию доменных объектов с учётом bulge.
     private static List<PolylineVertex> ParsePolylineVertices(JsonElement verticesElement)
     {
         var vertices = new List<PolylineVertex>();
@@ -261,21 +267,7 @@ public sealed class ConversationCoordinator(
         return vertices;
     }
 
-    private static bool ReadOptionalBoolean(JsonElement element, string propertyName, bool defaultValue)
-    {
-        if (!element.TryGetProperty(propertyName, out var value))
-            return defaultValue;
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.String => bool.TryParse(value.GetString(), out var parsed) ? parsed : throw new InvalidOperationException($"Некорректный формат параметра '{propertyName}'."),
-            JsonValueKind.Null or JsonValueKind.Undefined => defaultValue,
-            _ => throw new InvalidOperationException($"Некорректный формат параметра '{propertyName}'.")
-        };
-    }
-
+    // Унифицированный формат ответа: текст + JSON (если есть), чтобы LLM и пользователь видели детали.
     private static string FormatResult(CommandExecutionResult result)
     {
         if (string.IsNullOrWhiteSpace(result.Data))

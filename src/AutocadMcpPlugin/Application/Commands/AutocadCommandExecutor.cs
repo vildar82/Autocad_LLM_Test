@@ -7,7 +7,6 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
-using Autodesk.AutoCAD.Runtime;
 using AcadApplication = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace AutocadMcpPlugin.Application.Commands;
@@ -28,7 +27,6 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         var payload = JsonSerializer.Serialize(new
         {
             id = ToIdString(objectId),
-            handle = circle.Handle.ToString(),
             type = "circle",
             center = new { x = centerX, y = centerY },
             radius
@@ -50,7 +48,6 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         var payload = JsonSerializer.Serialize(new
         {
             id = ToIdString(objectId),
-            handle = line.Handle.ToString(),
             type = "line",
             start = new { x = startX, y = startY },
             end = new { x = endX, y = endY }
@@ -63,7 +60,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         IReadOnlyList<PolylineVertex> vertices,
         bool closed) => ExecuteSafe((modelSpace, _) =>
     {
-        if (vertices is null || vertices.Count < 2)
+        if (vertices.Count < 2)
             return CommandExecutionResult.CreateFailure("Нужно указать минимум две вершины полилинии.");
 
         var polyline = new Polyline();
@@ -80,7 +77,6 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         var payload = JsonSerializer.Serialize(new
         {
             id = ToIdString(objectId),
-            handle = polyline.Handle.ToString(),
             type = "polyline",
             closed,
             vertices = vertices.Select((v, index) => new
@@ -99,13 +95,13 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
 
     public CommandExecutionResult DrawObjects(IReadOnlyList<DrawingObjectRequest> objects)
     {
-        if (objects is null || objects.Count == 0)
+        if (objects.Count == 0)
             return CommandExecutionResult.CreateFailure("Список объектов для построения пуст.");
 
         var createdObjects = new List<object>();
         foreach (var request in objects)
         {
-            CommandExecutionResult result = request.Kind switch
+            var result = request.Kind switch
             {
                 DrawingObjectKind.Circle => DrawCircle(request.Circle!.CenterX, request.Circle.CenterY, request.Circle.Radius),
                 DrawingObjectKind.Line => DrawLine(request.Line!.StartX, request.Line.StartY, request.Line.EndX, request.Line.EndY),
@@ -116,8 +112,9 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
             if (!result.IsSuccess)
                 return result;
 
-            if (!string.IsNullOrWhiteSpace(result.Data))
-                createdObjects.Add(JsonSerializer.Deserialize<JsonElement>(result.Data));
+            var data = result.Data;
+            if (!string.IsNullOrWhiteSpace(data))
+                createdObjects.Add(JsonSerializer.Deserialize<JsonElement>(data!));
         }
 
         var payload = JsonSerializer.Serialize(new
@@ -132,7 +129,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
     {
         var objects = new List<object>();
 
-        foreach (ObjectId objectId in modelSpace)
+        foreach (var objectId in modelSpace)
         {
             if (objectId.GetObject(OpenMode.ForRead) is not Entity entity)
                 continue;
@@ -143,7 +140,6 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
                     objects.Add(new
                     {
                         id = ToIdString(objectId),
-                        handle = circle.Handle.ToString(),
                         type = "circle",
                         center = new { x = circle.Center.X, y = circle.Center.Y },
                         radius = circle.Radius
@@ -153,7 +149,6 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
                     objects.Add(new
                     {
                         id = ToIdString(objectId),
-                        handle = line.Handle.ToString(),
                         type = "line",
                         start = new { x = line.StartPoint.X, y = line.StartPoint.Y },
                         end = new { x = line.EndPoint.X, y = line.EndPoint.Y }
@@ -163,7 +158,6 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
                     objects.Add(new
                     {
                         id = ToIdString(objectId),
-                        handle = polyline.Handle.ToString(),
                         type = "polyline",
                         closed = polyline.Closed,
                         vertices = Enumerable.Range(0, polyline.NumberOfVertices).Select(i => new
@@ -188,17 +182,17 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
 
     public CommandExecutionResult DeleteObjects(IReadOnlyList<string> objectIds) => ExecuteSafe((modelSpace, _) =>
     {
-        if (objectIds is null || objectIds.Count == 0)
+        if (objectIds.Count == 0)
             return CommandExecutionResult.CreateFailure("Не переданы идентификаторы для удаления.");
 
         var deleted = new List<string>();
         var notFound = new List<string>();
 
-        foreach (var id in objectIds)
+        foreach (var idStr in objectIds)
         {
-            if (!TryGetObjectId(modelSpace.Database, id, out var objectId, out var error))
+            if (!modelSpace.Database.TryGetObjectId(idStr, out var objectId, out var _))
             {
-                notFound.Add(id);
+                notFound.Add(idStr);
                 continue;
             }
 
@@ -206,29 +200,23 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
             {
                 if (!objectId.IsValid)
                 {
-                    notFound.Add(id);
+                    notFound.Add(idStr);
                     continue;
                 }
 
                 var dbObject = objectId.GetObject(OpenMode.ForWrite, false, true);
-                if (dbObject is not Entity entity)
+                if (dbObject is not Entity entity || entity.IsErased)
                 {
-                    notFound.Add(id);
-                    continue;
-                }
-
-                if (entity.IsErased)
-                {
-                    notFound.Add(id);
+                    notFound.Add(idStr);
                     continue;
                 }
 
                 entity.Erase();
-                deleted.Add(id);
+                deleted.Add(idStr);
             }
             catch (Autodesk.AutoCAD.Runtime.Exception)
             {
-                notFound.Add(id);
+                notFound.Add(idStr);
             }
         }
 
@@ -248,7 +236,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         return CommandExecutionResult.CreateSuccess(message.Trim(), payload);
     });
 
-    public CommandExecutionResult GetPolylineVertices() => ExecuteSafe((modelSpace, doc) =>
+    public CommandExecutionResult GetPolylineVertices() => ExecuteSafe((_, doc) =>
     {
         var opt = new PromptEntityOptions("\nВыбери полилинию");
         opt.SetRejectMessage("\nНужно выбрать полилинию");
@@ -276,7 +264,6 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         var payload = JsonSerializer.Serialize(new
         {
             id = ToIdString(res.ObjectId),
-            handle = polyline.Handle.ToString(),
             closed = polyline.Closed,
             vertices
         }, new JsonSerializerOptions { WriteIndented = true });
@@ -308,41 +295,11 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         {
             return CommandExecutionResult.CreateFailure($"Ошибка AutoCAD: {autocadException.Message}");
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
             return CommandExecutionResult.CreateFailure($"Не удалось выполнить команду: {ex.Message}");
         }
     }
 
     private static string ToIdString(ObjectId objectId) => objectId.Handle.Value.ToString(CultureInfo.InvariantCulture);
-
-    private static bool TryGetObjectId(Database database, string id, out ObjectId objectId, out string error)
-    {
-        objectId = ObjectId.Null;
-        error = string.Empty;
-
-        if (!long.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
-        {
-            error = $"Некорректный идентификатор объекта: {id}.";
-            return false;
-        }
-
-        try
-        {
-            var handle = new Handle(value);
-            objectId = database.GetObjectId(false, handle, 0);
-            if (objectId == ObjectId.Null)
-            {
-                error = $"Объект с Id {id} не найден.";
-                return false;
-            }
-
-            return true;
-        }
-        catch (Autodesk.AutoCAD.Runtime.Exception)
-        {
-            error = $"Объект с Id {id} не найден.";
-            return false;
-        }
-    }
 }
