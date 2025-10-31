@@ -1,175 +1,184 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Text.RegularExpressions;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using AutocadMcpPlugin;
-using AutocadMcpPlugin.Application.Commands;
 using AutocadMcpPlugin.Infrastructure.Configuration;
 
 namespace AutocadMcpPlugin.Application.Conversations;
 
 /// <summary>
-/// Координирует обработку пользовательских сообщений, обращения к AutoCAD-командам и LLM.
+/// Координатор диалога между LLM и MCP-инструментами AutoCAD.
 /// </summary>
-public sealed class ConversationCoordinator : IConversationCoordinator
+public sealed class ConversationCoordinator(
+    IAutocadCommandExecutor commandExecutor,
+    ILlmClient llmClient,
+    OpenAiSettings settings)
+    : IConversationCoordinator
 {
-    private static readonly Regex NumericValueRegex = new(@"-?\d+(?:[.,]\d+)?", RegexOptions.Compiled);
-    private static readonly Regex RadiusRegex = new(@"радиус\w*\s*(?<value>-?\d+(?:[.,]\d+)?)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex CenterRegex = new(@"цент\w*\s*(?:в\s*)?\(?(?<x>-?\d+(?:[.,]\d+)?)\s*,\s*(?<y>-?\d+(?:[.,]\d+)?)\)?", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex LineStartRegex = new(@"от\s*(?:точк\w*\s*)?\(?(?<x>-?\d+(?:[.,]\d+)?)\s*,\s*(?<y>-?\d+(?:[.,]\d+)?)\)?", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex LineEndRegex = new(@"(до|в)\s*(?:точк\w*\s*)?\(?(?<x>-?\d+(?:[.,]\d+)?)\s*,\s*(?<y>-?\d+(?:[.,]\d+)?)\)?", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private readonly List<LlmMessage> _history =
+    [
+        LlmMessage.CreateSystem(
+            "Ты являешься ассистентом AutoCAD. Выполняй запросы пользователя с помощью доступных инструментов, чтобы создавать геометрию."),
+        LlmMessage.CreateSystem(
+            "Если параметры запроса неполные, сначала уточни недостающие данные у пользователя.")
+    ];
 
-    private readonly IAutocadCommandExecutor _commandExecutor;
-    private readonly ILlmClient _llmClient;
-    private readonly OpenAiSettings _settings;
-    private readonly List<LlmMessage> _history;
-
-    public ConversationCoordinator(
-        IAutocadCommandExecutor commandExecutor,
-        ILlmClient llmClient,
-        OpenAiSettings settings)
-    {
-        _commandExecutor = commandExecutor;
-        _llmClient = llmClient;
-        _settings = settings;
-        _history = new List<LlmMessage>
-        {
-            LlmMessage.CreateSystem("Ты ассистент проектировщика AutoCAD. Если не можешь выполнить команду самостоятельно, дай понятный текстовый ответ.")
-        };
-    }
+    private readonly IReadOnlyList<LlmToolDefinition> _toolDefinitions =
+    [
+        CreateCircleToolDefinition(),
+        CreateLineToolDefinition()
+    ];
 
     public async Task<string> ProcessUserMessageAsync(string message, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(message))
-            return "Уточните запрос.";
+            return "Пустое сообщение.";
 
         _history.Add(LlmMessage.CreateUser(message));
 
-        if (TryParseCircle(message, out var centerX, out var centerY, out var radius))
+        if (string.IsNullOrWhiteSpace(settings.ApiKey))
         {
-            var result = await _commandExecutor.DrawCircleAsync(centerX, centerY, radius, cancellationToken);
-            _history.Add(LlmMessage.CreateAssistant(result.Message));
-            return result.Message;
+            const string noKey = "Не удалось обратиться к LLM. Укажи API-ключ OpenAI в настройках.";
+            _history.Add(LlmMessage.CreateAssistant(noKey));
+            return noKey;
         }
 
-        if (TryParseLine(message, out var startX, out var startY, out var endX, out var endY))
+        for (var iteration = 0; iteration < 6; iteration++)
         {
-            var result = await _commandExecutor.DrawLineAsync(startX, startY, endX, endY, cancellationToken);
-            _history.Add(LlmMessage.CreateAssistant(result.Message));
-            return result.Message;
+            var request = new LlmChatRequest(TrimHistory(), _toolDefinitions);
+            var response = await llmClient.CreateChatCompletionAsync(request, cancellationToken);
+
+            if (!response.IsSuccess)
+            {
+                var errorMessage = response.Error ?? "Не удалось получить ответ от LLM.";
+                _history.Add(LlmMessage.CreateAssistant(errorMessage));
+                return errorMessage;
+            }
+
+            if (response.ToolCalls.Count > 0)
+            {
+                _history.Add(LlmMessage.CreateAssistantWithToolCalls(response.ToolCalls, response.Content));
+
+                foreach (var toolCall in response.ToolCalls)
+                {
+                    var toolResult = await ExecuteToolCallAsync(toolCall, cancellationToken);
+                    _history.Add(LlmMessage.CreateTool(toolCall.Id, toolResult));
+                }
+
+                continue;
+            }
+
+            if (!string.IsNullOrEmpty(response.Content))
+            {
+                var finalContent = response.Content!;
+                _history.Add(LlmMessage.CreateAssistant(finalContent));
+                return finalContent;
+            }
         }
 
-        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
-        {
-            const string messageNoKey = "Чтобы обратиться к языковой модели, задайте API-ключ OpenAI.";
-            _history.Add(LlmMessage.CreateAssistant(messageNoKey));
-            return messageNoKey;
-        }
-
-        var trimmedHistory = TrimHistory(_history);
-        var request = new LlmChatRequest(trimmedHistory);
-        var response = await _llmClient.CreateChatCompletionAsync(request, cancellationToken);
-
-        if (!response.IsSuccess)
-        {
-            var errorMessage = response.Error ?? "Не удалось получить ответ от LLM.";
-            _history.Add(LlmMessage.CreateAssistant(errorMessage));
-            return errorMessage;
-        }
-
-        _history.Add(LlmMessage.CreateAssistant(response.Content!));
-        return response.Content!;
+        const string fallback = "Не удалось согласовать ответ с LLM.";
+        _history.Add(LlmMessage.CreateAssistant(fallback));
+        return fallback;
     }
 
-    private static IReadOnlyList<LlmMessage> TrimHistory(List<LlmMessage> history)
+    private async Task<string> ExecuteToolCallAsync(LlmToolCall toolCall, CancellationToken cancellationToken)
     {
-        const int maxMessages = 20;
-        if (history.Count <= maxMessages)
-            return history;
-
-        return history.GetRange(history.Count - maxMessages, maxMessages);
+        try
+        {
+            return toolCall.Name switch
+            {
+                "draw_circle" => await ExecuteDrawCircleAsync(toolCall, cancellationToken),
+                "draw_line" => await ExecuteDrawLineAsync(toolCall, cancellationToken),
+                _ => $"Неизвестный инструмент: {toolCall.Name}"
+            };
+        }
+        catch (Exception ex)
+        {
+            return $"Ошибка инструмента {toolCall.Name}: {ex.Message}";
+        }
     }
 
-    private static bool TryParseCircle(string text, out double centerX, out double centerY, out double radius)
+    private async Task<string> ExecuteDrawCircleAsync(LlmToolCall toolCall, CancellationToken cancellationToken)
     {
-        centerX = centerY = radius = 0;
-        if (!ContainsInvariant(text, "круг"))
-            return false;
-
-        var numbers = NumericValueRegex.Matches(text);
-        radius = TryExtractNumber(RadiusRegex.Match(text));
-        if (radius <= 0)
-        {
-            if (numbers.Count == 0)
-                return false;
-
-            radius = TryParse(numbers[0].Value);
-            if (radius <= 0)
-                return false;
-        }
-
-        var centerMatch = CenterRegex.Match(text);
-        if (centerMatch.Success)
-        {
-            centerX = TryParse(centerMatch.Groups["x"].Value);
-            centerY = TryParse(centerMatch.Groups["y"].Value);
-            return true;
-        }
-
-        if (numbers.Count >= 3)
-        {
-            centerX = TryParse(numbers[1].Value);
-            centerY = TryParse(numbers[2].Value);
-            return true;
-        }
-
-        return false;
+        var radius = GetDouble(toolCall.Arguments, "radius");
+        var centerX = GetDouble(toolCall.Arguments, "center_x");
+        var centerY = GetDouble(toolCall.Arguments, "center_y");
+        var result = await commandExecutor.DrawCircleAsync(centerX, centerY, radius, cancellationToken);
+        return result.Message;
     }
 
-    private static bool TryParseLine(string text, out double startX, out double startY, out double endX, out double endY)
+    private async Task<string> ExecuteDrawLineAsync(LlmToolCall toolCall, CancellationToken cancellationToken)
     {
-        startX = startY = endX = endY = 0;
-        if (!ContainsInvariant(text, "лини") && !ContainsInvariant(text, "отрез"))
-            return false;
-
-        var startMatch = LineStartRegex.Match(text);
-        var endMatch = LineEndRegex.Match(text);
-
-        if (startMatch.Success && endMatch.Success)
-        {
-            startX = TryParse(startMatch.Groups["x"].Value);
-            startY = TryParse(startMatch.Groups["y"].Value);
-            endX = TryParse(endMatch.Groups["x"].Value);
-            endY = TryParse(endMatch.Groups["y"].Value);
-            return true;
-        }
-
-        var numbers = NumericValueRegex.Matches(text);
-        if (numbers.Count >= 4)
-        {
-            startX = TryParse(numbers[0].Value);
-            startY = TryParse(numbers[1].Value);
-            endX = TryParse(numbers[2].Value);
-            endY = TryParse(numbers[3].Value);
-            return true;
-        }
-
-        return false;
+        var startX = GetDouble(toolCall.Arguments, "start_x");
+        var startY = GetDouble(toolCall.Arguments, "start_y");
+        var endX = GetDouble(toolCall.Arguments, "end_x");
+        var endY = GetDouble(toolCall.Arguments, "end_y");
+        var result = await commandExecutor.DrawLineAsync(startX, startY, endX, endY, cancellationToken);
+        return result.Message;
     }
 
-    private static double TryExtractNumber(Match match) =>
-        match.Success ? TryParse(match.Groups["value"].Value) : 0;
-
-    private static bool ContainsInvariant(string source, string value) =>
-        source.IndexOf(value, StringComparison.InvariantCultureIgnoreCase) >= 0;
-
-    private static double TryParse(string input)
+    private static LlmToolDefinition CreateCircleToolDefinition()
     {
-        var normalized = input.Replace(',', '.');
-        return double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
-            ? value
-            : 0;
+        var schema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            required = new[] { "center_x", "center_y", "radius" },
+            properties = new
+            {
+                center_x = new { type = "number", description = "Координата X центра окружности" },
+                center_y = new { type = "number", description = "Координата Y центра окружности" },
+                radius = new { type = "number", minimum = 0.0001, description = "Радиус окружности" }
+            }
+        });
+
+        return new LlmToolDefinition(
+            "draw_circle",
+            "Построить круг в чертеже AutoCAD по переданным координатам и радиусу.",
+            schema);
+    }
+
+    private static LlmToolDefinition CreateLineToolDefinition()
+    {
+        var schema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            required = new[] { "start_x", "start_y", "end_x", "end_y" },
+            properties = new
+            {
+                start_x = new { type = "number", description = "Координата X начальной точки" },
+                start_y = new { type = "number", description = "Координата Y начальной точки" },
+                end_x = new { type = "number", description = "Координата X конечной точки" },
+                end_y = new { type = "number", description = "Координата Y конечной точки" }
+            }
+        });
+
+        return new LlmToolDefinition(
+            "draw_line",
+            "Построить отрезок между двумя точками в чертеже AutoCAD.",
+            schema);
+    }
+
+    private static double GetDouble(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value))
+            throw new InvalidOperationException($"Не найден параметр '{propertyName}'.");
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number => value.GetDouble(),
+            JsonValueKind.String => double.Parse(value.GetString() ?? string.Empty, CultureInfo.InvariantCulture),
+            _ => throw new InvalidOperationException($"Некорректный формат параметра '{propertyName}'.")
+        };
+    }
+
+    private IReadOnlyList<LlmMessage> TrimHistory()
+    {
+        const int maxMessages = 30;
+        if (_history.Count <= maxMessages)
+            return _history;
+
+        return _history.GetRange(_history.Count - maxMessages, maxMessages);
     }
 }

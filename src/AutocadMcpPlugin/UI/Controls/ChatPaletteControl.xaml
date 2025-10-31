@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="AutocadMcpPlugin.UI.Controls.ChatPaletteControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -6,8 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:viewModels="clr-namespace:AutocadMcpPlugin.UI.ViewModels"
-    MinWidth="320"
-    MinHeight="420"
+    MinWidth="320" MinHeight="420"
     d:DataContext="{d:DesignInstance viewModels:ChatViewModel}"
     mc:Ignorable="d">
     <Grid Margin="8">
@@ -19,24 +18,21 @@
         </Grid.RowDefinitions>
 
         <TextBlock
-            FontSize="16"
-            FontWeight="Bold"
+            FontSize="16" FontWeight="Bold"
             Text="Чат ассистента MCP" />
 
         <Border
             Grid.Row="1"
             Margin="0,12,0,12"
-            Background="#FFF7F7F7"
-            BorderBrush="#FFD0D0D0"
-            BorderThickness="1"
-            CornerRadius="4">
+            Background="#FFF7F7F7" BorderBrush="#FFD0D0D0"
+            BorderThickness="1" CornerRadius="4">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding Messages}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Margin="8,4">
                                 <TextBlock FontWeight="Bold" Text="{Binding Author}" />
-                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                                <TextBox Text="{Binding Text, Mode=OneWay}" TextWrapping="Wrap" />
                             </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -49,8 +45,7 @@
             MinHeight="60"
             AcceptsReturn="True"
             Text="{Binding UserInput, UpdateSourceTrigger=PropertyChanged}"
-            TextWrapping="Wrap"
-            ToolTip="Опишите, что нужно сделать..."
+            TextWrapping="Wrap" ToolTip="Опишите, что нужно сделать..."
             VerticalScrollBarVisibility="Auto" />
 
         <Grid Grid.Row="3" Margin="0,8,0,0">
@@ -60,23 +55,23 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Button Grid.Column="0"
-                    Content="Настройки"
-                    Padding="12,0"
-                    Margin="0,0,12,0"
-                    Click="OnSettingsClicked" />
+            <Button
+                Grid.Column="0"
+                Margin="0,0,12,0" Padding="12,0"
+                Click="OnSettingsClicked" Content="Настройки" />
 
-            <TextBlock Grid.Column="1"
-                       Margin="0,0,12,0"
-                       VerticalAlignment="Center"
-                       Foreground="Gray"
-                       Text="{Binding StatusMessage}" />
+            <TextBlock
+                Grid.Column="1"
+                Margin="0,0,12,0" VerticalAlignment="Center"
+                Foreground="Gray"
+                Text="{Binding StatusMessage}" />
 
-            <Button Grid.Column="2"
-                    Height="32"
-                    Padding="12,0"
-                    Command="{Binding SendCommand}"
-                    Content="Отправить" />
+            <Button
+                Grid.Column="2"
+                Height="32"
+                Padding="12,0"
+                Command="{Binding SendCommand}"
+                Content="Отправить" />
         </Grid>
     </Grid>
 </UserControl>

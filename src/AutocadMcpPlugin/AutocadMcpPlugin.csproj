@@ -1,26 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
-    <LangVersion>latest</LangVersion>
-    <Nullable>enable</Nullable>
-    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <UseWpf>true</UseWpf>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net48</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+        <UseWpf>true</UseWpf>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="AutoCAD2019.Base" Version="1.0.3">
-      <ExcludeAssets>runtime;build</ExcludeAssets>
-    </PackageReference>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0" />
-    <PackageReference Include="System.Net.Http.Json" Version="7.0.0" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="AutoCAD2019.Base" Version="1.0.3" ExcludeAssets="runtime;build"/>
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0"/>
+        <PackageReference Include="System.Net.Http.Json" Version="7.0.0"/>
+        <PackageReference Include="IsExternalInit" Version="1.0.3" ExcludeAssets="runtime;build"/>
+    </ItemGroup>
 
-  <ItemGroup Label="Documentation">
-    <None Include="..\..\plan.md" Pack="false" />
-    <None Include="..\..\docs\README.md" Pack="false" />
-  </ItemGroup>
+    <ItemGroup Label="Documentation">
+        <None Include="..\..\plan.md" Pack="false"/>
+        <None Include="..\..\docs\README.md" Pack="false"/>
+    </ItemGroup>
 
 </Project>

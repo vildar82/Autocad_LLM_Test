@@ -1,8 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
-using AutocadMcpPlugin;
-using AutocadMcpPlugin.Application.Conversations;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -49,7 +47,7 @@ public sealed partial class ChatViewModel : ObservableObject
         try
         {
             IsBusy = true;
-            StatusMessage = "Обрабатываю запрос…";
+            StatusMessage = "Обрабатываю запрос...";
 
             Messages.Add(new ChatMessage("Вы", message));
             UserInput = string.Empty;

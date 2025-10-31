@@ -27,13 +27,13 @@ public sealed class JsonSettingsService : ISettingsService
         Current = Load();
     }
 
-    public PluginSettings Current { get; private set; }
+    public PluginSettings Current { get; }
 
     public event EventHandler<PluginSettings>? SettingsSaved;
 
     public void SetOpenAiApiKey(string apiKey)
     {
-        Current.OpenAiApiKey = apiKey ?? string.Empty;
+        Current.OpenAiApiKey = apiKey;
         Save(Current);
         SettingsSaved?.Invoke(this, Current);
     }

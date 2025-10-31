@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using AutocadMcpPlugin.Infrastructure.DependencyInjection;
 using AutocadMcpPlugin.UI.Controls;
 using AutocadMcpPlugin.UI.ViewModels;
@@ -34,6 +35,7 @@ public sealed class ChatPaletteHost : IDisposable
                     PaletteSetStyles.ShowPropertiesMenu
         };
 
+        _paletteSet.SetSize(new Size(500, 600));
         _paletteSet.AddVisual("Chat", _control);
     }
 
@@ -92,7 +94,7 @@ public sealed class ChatPaletteHost : IDisposable
                 Owner = System.Windows.Application.Current?.MainWindow
             };
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
-            _settingsWindow.Show();
+            Autodesk.AutoCAD.ApplicationServices.Core.Application.ShowModelessWindow(_settingsWindow);
         }
         else
         {
