@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Window
+    Title="Настройки LLM плагина"
+    x:Class="AutocadLlmPlugin.UI.Windows.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Width="520" Height="340"
+    WindowStartupLocation="CenterOwner"
+    mc:Ignorable="d">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock FontWeight="Bold" Text="OpenAI API-ключ" />
+
+        <TextBox
+            Grid.Row="1"
+            Height="80"
+            Margin="0,8,0,0"
+            AcceptsReturn="True"
+            Text="{Binding OpenAiApiKey, UpdateSourceTrigger=PropertyChanged}"
+            TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
+
+        <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock
+                Grid.Column="0"
+                VerticalAlignment="Center"
+                Foreground="Gray"
+                Text="{Binding StatusMessage}" />
+
+            <Button
+                Grid.Column="1"
+                Margin="0,0,12,0" Padding="16,4"
+                Command="{Binding SaveCommand}"
+                Content="Сохранить" />
+
+            <Button
+                Grid.Column="2"
+                Padding="16,4"
+                Click="OnCloseClicked" Content="Закрыть" />
+        </Grid>
+    </Grid>
+</Window>

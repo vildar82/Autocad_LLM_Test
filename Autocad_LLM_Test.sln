@@ -1,0 +1,29 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFolder", "SolutionFolder", "{B2DBDFFF-283E-45A4-B17A-0A809053398A}"
+	ProjectSection(SolutionItems) = preProject
+		plan.md = plan.md
+		docs\README.md = docs\README.md
+		rules.md = rules.md
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutocadLlmPlugin", "src\AutocadLlmPlugin\AutocadLlmPlugin.csproj", "{FB4CDBA5-AF9E-4F19-9D22-E3B39100DC90}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FB4CDBA5-AF9E-4F19-9D22-E3B39100DC90}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB4CDBA5-AF9E-4F19-9D22-E3B39100DC90}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB4CDBA5-AF9E-4F19-9D22-E3B39100DC90}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB4CDBA5-AF9E-4F19-9D22-E3B39100DC90}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
