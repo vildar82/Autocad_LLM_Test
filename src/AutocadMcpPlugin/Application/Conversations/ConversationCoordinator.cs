@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,15 +19,16 @@ public sealed class ConversationCoordinator(
     private readonly List<LlmMessage> _history =
     [
         LlmMessage.CreateSystem(
-            "Ты являешься ассистентом AutoCAD. Выполняй запросы пользователя с помощью доступных инструментов, чтобы создавать геометрию."),
+            "Ты ассистент AutoCAD. Выполняй запросы пользователей с помощью инструментов, которые тебе доступны."),
         LlmMessage.CreateSystem(
-            "Если параметры запроса неполные, сначала уточни недостающие данные у пользователя.")
+            "Если входных данных недостаточно, уточни детали у пользователя перед запуском инструментов.")
     ];
 
     private readonly IReadOnlyList<LlmToolDefinition> _toolDefinitions =
     [
         CreateCircleToolDefinition(),
-        CreateLineToolDefinition()
+        CreateLineToolDefinition(),
+        GetPolylineToolDefinition()
     ];
 
     public async Task<string> ProcessUserMessageAsync(string message, CancellationToken cancellationToken = default)
@@ -63,7 +63,7 @@ public sealed class ConversationCoordinator(
 
                 foreach (var toolCall in response.ToolCalls)
                 {
-                    var toolResult = await ExecuteToolCallAsync(toolCall, cancellationToken);
+                    var toolResult = ExecuteToolCall(toolCall);
                     _history.Add(LlmMessage.CreateTool(toolCall.Id, toolResult));
                 }
 
@@ -83,14 +83,15 @@ public sealed class ConversationCoordinator(
         return fallback;
     }
 
-    private async Task<string> ExecuteToolCallAsync(LlmToolCall toolCall, CancellationToken cancellationToken)
+    private string ExecuteToolCall(LlmToolCall toolCall)
     {
         try
         {
             return toolCall.Name switch
             {
-                "draw_circle" => await ExecuteDrawCircleAsync(toolCall, cancellationToken),
-                "draw_line" => await ExecuteDrawLineAsync(toolCall, cancellationToken),
+                "draw_circle" => ExecuteDrawCircle(toolCall),
+                "draw_line" => ExecuteDrawLine(toolCall),
+                "get_polyline_vertices" => ExecuteGetPolylineVertices(toolCall),
                 _ => $"Неизвестный инструмент: {toolCall.Name}"
             };
         }
@@ -100,22 +101,28 @@ public sealed class ConversationCoordinator(
         }
     }
 
-    private async Task<string> ExecuteDrawCircleAsync(LlmToolCall toolCall, CancellationToken cancellationToken)
+    private string ExecuteDrawCircle(LlmToolCall toolCall)
     {
-        var radius = GetDouble(toolCall.Arguments, "radius");
-        var centerX = GetDouble(toolCall.Arguments, "center_x");
-        var centerY = GetDouble(toolCall.Arguments, "center_y");
-        var result = await commandExecutor.DrawCircleAsync(centerX, centerY, radius, cancellationToken);
+        var radius = toolCall.Arguments.GetDouble("radius");
+        var centerX = toolCall.Arguments.GetDouble("center_x");
+        var centerY = toolCall.Arguments.GetDouble("center_y");
+        var result = commandExecutor.DrawCircle(centerX, centerY, radius);
         return result.Message;
     }
 
-    private async Task<string> ExecuteDrawLineAsync(LlmToolCall toolCall, CancellationToken cancellationToken)
+    private string ExecuteDrawLine(LlmToolCall toolCall)
     {
-        var startX = GetDouble(toolCall.Arguments, "start_x");
-        var startY = GetDouble(toolCall.Arguments, "start_y");
-        var endX = GetDouble(toolCall.Arguments, "end_x");
-        var endY = GetDouble(toolCall.Arguments, "end_y");
-        var result = await commandExecutor.DrawLineAsync(startX, startY, endX, endY, cancellationToken);
+        var startX = toolCall.Arguments.GetDouble("start_x");
+        var startY = toolCall.Arguments.GetDouble("start_y");
+        var endX = toolCall.Arguments.GetDouble("end_x");
+        var endY = toolCall.Arguments.GetDouble("end_y");
+        var result = commandExecutor.DrawLine(startX, startY, endX, endY);
+        return result.Message;
+    }
+
+    private string ExecuteGetPolylineVertices(LlmToolCall toolCall)
+    {
+        var result = commandExecutor.GetPolylineVertices();
         return result.Message;
     }
 
@@ -160,17 +167,14 @@ public sealed class ConversationCoordinator(
             schema);
     }
 
-    private static double GetDouble(JsonElement element, string propertyName)
+    private static LlmToolDefinition GetPolylineToolDefinition()
     {
-        if (!element.TryGetProperty(propertyName, out var value))
-            throw new InvalidOperationException($"Не найден параметр '{propertyName}'.");
+        var schema = JsonSerializer.SerializeToElement(new { });
 
-        return value.ValueKind switch
-        {
-            JsonValueKind.Number => value.GetDouble(),
-            JsonValueKind.String => double.Parse(value.GetString() ?? string.Empty, CultureInfo.InvariantCulture),
-            _ => throw new InvalidOperationException($"Некорректный формат параметра '{propertyName}'.")
-        };
+        return new LlmToolDefinition(
+            "get_polyline_vertices",
+            "Получить координаты вершин полилинии и вернуть их в формате JSON.",
+            schema);
     }
 
     private IReadOnlyList<LlmMessage> TrimHistory()

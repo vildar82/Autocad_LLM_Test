@@ -4,20 +4,20 @@ using System.Threading.Tasks;
 namespace AutocadMcpPlugin;
 
 /// <summary>
-/// Выполняет команды построения примитивов в AutoCAD.
+/// Выполняет команды и запросы к чертежу AutoCAD.
 /// </summary>
 public interface IAutocadCommandExecutor
 {
-    Task<CommandExecutionResult> DrawCircleAsync(
+    CommandExecutionResult DrawCircle(
         double centerX,
         double centerY,
-        double radius,
-        CancellationToken cancellationToken = default);
+        double radius);
 
-    Task<CommandExecutionResult> DrawLineAsync(
+    CommandExecutionResult DrawLine(
         double startX,
         double startY,
         double endX,
-        double endY,
-        CancellationToken cancellationToken = default);
+        double endY);
+
+    CommandExecutionResult GetPolylineVertices();
 }
