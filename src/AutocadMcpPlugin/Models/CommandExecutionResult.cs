@@ -3,15 +3,24 @@ namespace AutocadMcpPlugin;
 /// <summary>
 /// Результат выполнения команды AutoCAD.
 /// </summary>
-public sealed class CommandExecutionResult(bool isSuccess, string message)
+public sealed class CommandExecutionResult
 {
-    public bool IsSuccess { get; } = isSuccess;
+    private CommandExecutionResult(bool isSuccess, string message, string? data)
+    {
+        IsSuccess = isSuccess;
+        Message = message;
+        Data = data;
+    }
 
-    public string Message { get; } = message;
+    public bool IsSuccess { get; }
 
-    public static CommandExecutionResult CreateSuccess(string message) =>
-        new(true, message);
+    public string Message { get; }
+
+    public string? Data { get; }
+
+    public static CommandExecutionResult CreateSuccess(string message, string? data = null) =>
+        new(true, message, data);
 
     public static CommandExecutionResult CreateFailure(string message) =>
-        new(false, message);
+        new(false, message, null);
 }

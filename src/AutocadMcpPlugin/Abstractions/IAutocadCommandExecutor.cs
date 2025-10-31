@@ -1,5 +1,4 @@
-using System.Threading;
-using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace AutocadMcpPlugin;
 
@@ -18,6 +17,18 @@ public interface IAutocadCommandExecutor
         double startY,
         double endX,
         double endY);
+
+    CommandExecutionResult DrawPolyline(
+        IReadOnlyList<PolylineVertex> vertices,
+        bool closed);
+
+    CommandExecutionResult DrawObjects(
+        IReadOnlyList<DrawingObjectRequest> objects);
+
+    CommandExecutionResult GetModelObjects();
+
+    CommandExecutionResult DeleteObjects(
+        IReadOnlyList<string> objectIds);
 
     CommandExecutionResult GetPolylineVertices();
 }

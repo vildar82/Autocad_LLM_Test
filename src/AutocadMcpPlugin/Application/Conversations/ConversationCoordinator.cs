@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,8 +29,12 @@ public sealed class ConversationCoordinator(
 
     private readonly IReadOnlyList<LlmToolDefinition> _toolDefinitions =
     [
-        CreateCircleToolDefinition(),
-        CreateLineToolDefinition(),
+        DrawCircleToolDefinition(),
+        DrawLineToolDefinition(),
+        DrawPolylineToolDefinition(),
+        DrawObjectsToolDefinition(),
+        GetObjectsToolDefinition(),
+        DeleteObjectsToolDefinition(),
         GetPolylineToolDefinition()
     ];
 
@@ -91,6 +98,10 @@ public sealed class ConversationCoordinator(
             {
                 "draw_circle" => ExecuteDrawCircle(toolCall),
                 "draw_line" => ExecuteDrawLine(toolCall),
+                "draw_polyline" => ExecuteDrawPolyline(toolCall),
+                "draw_objects" => ExecuteDrawObjects(toolCall),
+                "get_model_objects" => ExecuteGetModelObjects(),
+                "delete_objects" => ExecuteDeleteObjects(toolCall),
                 "get_polyline_vertices" => ExecuteGetPolylineVertices(toolCall),
                 _ => $"Неизвестный инструмент: {toolCall.Name}"
             };
@@ -107,7 +118,7 @@ public sealed class ConversationCoordinator(
         var centerX = toolCall.Arguments.GetDouble("center_x");
         var centerY = toolCall.Arguments.GetDouble("center_y");
         var result = commandExecutor.DrawCircle(centerX, centerY, radius);
-        return result.Message;
+        return FormatResult(result);
     }
 
     private string ExecuteDrawLine(LlmToolCall toolCall)
@@ -117,16 +128,170 @@ public sealed class ConversationCoordinator(
         var endX = toolCall.Arguments.GetDouble("end_x");
         var endY = toolCall.Arguments.GetDouble("end_y");
         var result = commandExecutor.DrawLine(startX, startY, endX, endY);
-        return result.Message;
+        return FormatResult(result);
+    }
+
+    private string ExecuteDrawPolyline(LlmToolCall toolCall)
+    {
+        if (!toolCall.Arguments.TryGetProperty("vertices", out var verticesElement) || verticesElement.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Не найден массив вершин 'vertices'.");
+
+        var vertices = ParsePolylineVertices(verticesElement);
+        if (vertices.Count < 2)
+            throw new InvalidOperationException("Для построения полилинии необходимо минимум две вершины.");
+
+        var closed = ReadOptionalBoolean(toolCall.Arguments, "closed", false);
+        var result = commandExecutor.DrawPolyline(vertices, closed);
+        return FormatResult(result);
+    }
+
+    private string ExecuteDrawObjects(LlmToolCall toolCall)
+    {
+        if (!toolCall.Arguments.TryGetProperty("objects", out var objectsElement) || objectsElement.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Не найден массив 'objects'.");
+
+        var requests = new List<DrawingObjectRequest>();
+        foreach (var objectElement in objectsElement.EnumerateArray())
+        {
+            if (objectElement.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("Каждый элемент массива 'objects' должен быть объектом.");
+
+            var type = objectElement.GetString("type").ToLowerInvariant();
+            switch (type)
+            {
+                case "circle":
+                    requests.Add(DrawingObjectRequest.ForCircle(
+                        objectElement.GetDouble("center_x"),
+                        objectElement.GetDouble("center_y"),
+                        objectElement.GetDouble("radius")));
+                    break;
+                case "line":
+                    requests.Add(DrawingObjectRequest.ForLine(
+                        objectElement.GetDouble("start_x"),
+                        objectElement.GetDouble("start_y"),
+                        objectElement.GetDouble("end_x"),
+                        objectElement.GetDouble("end_y")));
+                    break;
+                case "polyline":
+                    if (!objectElement.TryGetProperty("vertices", out var verticesElement) || verticesElement.ValueKind != JsonValueKind.Array)
+                        throw new InvalidOperationException("Полилиния должна содержать массив 'vertices'.");
+
+                    var vertices = ParsePolylineVertices(verticesElement);
+                    if (vertices.Count < 2)
+                        throw new InvalidOperationException("Нужно указать минимум две вершины полилинии.");
+
+                    var closed = ReadOptionalBoolean(objectElement, "closed", false);
+                    requests.Add(DrawingObjectRequest.ForPolyline(vertices, closed));
+                    break;
+                default:
+                    throw new InvalidOperationException($"Тип объекта '{type}' не поддерживается.");
+            }
+        }
+
+        var result = commandExecutor.DrawObjects(requests);
+        return FormatResult(result);
+    }
+
+    private string ExecuteGetModelObjects()
+    {
+        var result = commandExecutor.GetModelObjects();
+        return FormatResult(result);
+    }
+
+    private string ExecuteDeleteObjects(LlmToolCall toolCall)
+    {
+        if (!toolCall.Arguments.TryGetProperty("object_ids", out var idsElement) || idsElement.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Ожидался массив 'object_ids'.");
+
+        var ids = new List<string>();
+        foreach (var idElement in idsElement.EnumerateArray())
+        {
+            if (idElement.ValueKind == JsonValueKind.String)
+            {
+                var id = idElement.GetString() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(id))
+                    ids.Add(id.Trim());
+            }
+            else if (idElement.ValueKind == JsonValueKind.Number && idElement.TryGetInt64(out var numericId))
+            {
+                ids.Add(numericId.ToString(CultureInfo.InvariantCulture));
+            }
+            else
+            {
+                throw new InvalidOperationException("Идентификаторы объектов должны быть строками или числами.");
+            }
+        }
+
+        var result = commandExecutor.DeleteObjects(ids);
+        return FormatResult(result);
     }
 
     private string ExecuteGetPolylineVertices(LlmToolCall toolCall)
     {
         var result = commandExecutor.GetPolylineVertices();
-        return result.Message;
+        return FormatResult(result);
     }
 
-    private static LlmToolDefinition CreateCircleToolDefinition()
+    private static List<PolylineVertex> ParsePolylineVertices(JsonElement verticesElement)
+    {
+        var vertices = new List<PolylineVertex>();
+        foreach (var vertexElement in verticesElement.EnumerateArray())
+        {
+            if (vertexElement.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("Каждая вершина должна быть объектом с координатами.");
+
+            var x = vertexElement.GetDouble("x");
+            var y = vertexElement.GetDouble("y");
+            var bulge = 0d;
+
+            if (vertexElement.TryGetProperty("bulge", out var bulgeElement))
+            {
+                bulge = bulgeElement.ValueKind switch
+                {
+                    JsonValueKind.Number => bulgeElement.GetDouble(),
+                    JsonValueKind.String => double.Parse(bulgeElement.GetString() ?? string.Empty, CultureInfo.InvariantCulture),
+                    JsonValueKind.Null or JsonValueKind.Undefined => 0,
+                    _ => throw new InvalidOperationException("Некорректный формат параметра 'bulge'.")
+                };
+            }
+
+            vertices.Add(new PolylineVertex(x, y, bulge));
+        }
+
+        return vertices;
+    }
+
+    private static bool ReadOptionalBoolean(JsonElement element, string propertyName, bool defaultValue)
+    {
+        if (!element.TryGetProperty(propertyName, out var value))
+            return defaultValue;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String => bool.TryParse(value.GetString(), out var parsed) ? parsed : throw new InvalidOperationException($"Некорректный формат параметра '{propertyName}'."),
+            JsonValueKind.Null or JsonValueKind.Undefined => defaultValue,
+            _ => throw new InvalidOperationException($"Некорректный формат параметра '{propertyName}'.")
+        };
+    }
+
+    private static string FormatResult(CommandExecutionResult result)
+    {
+        if (string.IsNullOrWhiteSpace(result.Data))
+            return result.Message;
+
+        var builder = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(result.Message))
+            builder.AppendLine(result.Message);
+
+        builder.AppendLine("`json");
+        builder.AppendLine(result.Data);
+        builder.Append("`");
+        return builder.ToString();
+    }
+
+    private static LlmToolDefinition DrawCircleToolDefinition()
     {
         var schema = JsonSerializer.SerializeToElement(new
         {
@@ -146,7 +311,7 @@ public sealed class ConversationCoordinator(
             schema);
     }
 
-    private static LlmToolDefinition CreateLineToolDefinition()
+    private static LlmToolDefinition DrawLineToolDefinition()
     {
         var schema = JsonSerializer.SerializeToElement(new
         {
@@ -167,13 +332,137 @@ public sealed class ConversationCoordinator(
             schema);
     }
 
+    private static LlmToolDefinition DrawPolylineToolDefinition()
+    {
+        var schema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            required = new[] { "vertices" },
+            properties = new
+            {
+                vertices = new
+                {
+                    type = "array",
+                    minItems = 2,
+                    description = "Список вершин полилинии с координатами и необязательным параметром bulge.",
+                    items = new
+                    {
+                        type = "object",
+                        required = new[] { "x", "y" },
+                        properties = new
+                        {
+                            x = new { type = "number", description = "Координата X вершины" },
+                            y = new { type = "number", description = "Координата Y вершины" },
+                            bulge = new { type = "number", description = "Опциональный коэффициент bulge" }
+                        }
+                    }
+                },
+                closed = new { type = "boolean", description = "Замкнуть полилинию после добавления всех вершин." }
+            }
+        });
+
+        return new LlmToolDefinition(
+            "draw_polyline",
+            "Построить полилинию по списку вершин. Поддерживается параметр bulge и режим замыкания.",
+            schema);
+    }
+
+    private static LlmToolDefinition DrawObjectsToolDefinition()
+    {
+        var schema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            required = new[] { "objects" },
+            properties = new
+            {
+                objects = new
+                {
+                    type = "array",
+                    minItems = 1,
+                    description = "Список объектов для построения.",
+                    items = new
+                    {
+                        type = "object",
+                        required = new[] { "type" },
+                        properties = new
+                        {
+                            type = new { type = "string", description = "Тип объекта: circle, line или polyline." },
+                            center_x = new { type = "number" },
+                            center_y = new { type = "number" },
+                            radius = new { type = "number" },
+                            start_x = new { type = "number" },
+                            start_y = new { type = "number" },
+                            end_x = new { type = "number" },
+                            end_y = new { type = "number" },
+                            vertices = new
+                            {
+                                type = "array",
+                                items = new
+                                {
+                                    type = "object",
+                                    required = new[] { "x", "y" },
+                                    properties = new
+                                    {
+                                        x = new { type = "number" },
+                                        y = new { type = "number" },
+                                        bulge = new { type = "number" }
+                                    }
+                                }
+                            },
+                            closed = new { type = "boolean" }
+                        }
+                    }
+                }
+            }
+        });
+
+        return new LlmToolDefinition(
+            "draw_objects",
+            "Построить список объектов (круги, отрезки, полилинии) в одном вызове.",
+            schema);
+    }
+
+    private static LlmToolDefinition GetObjectsToolDefinition()
+    {
+        var schema = JsonSerializer.SerializeToElement(new { });
+
+        return new LlmToolDefinition(
+            "get_model_objects",
+            "Вернуть список объектов чертежа: круги, отрезки и полилинии.",
+            schema);
+    }
+
+    private static LlmToolDefinition DeleteObjectsToolDefinition()
+    {
+        var schema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            required = new[] { "object_ids" },
+            properties = new
+            {
+                object_ids = new
+                {
+                    type = "array",
+                    minItems = 1,
+                    description = "Список идентификаторов объектов для удаления.",
+                    items = new { type = "string" }
+                }
+            }
+        });
+
+        return new LlmToolDefinition(
+            "delete_objects",
+            "Удалить объекты по их идентификаторам.",
+            schema);
+    }
+
     private static LlmToolDefinition GetPolylineToolDefinition()
     {
         var schema = JsonSerializer.SerializeToElement(new { });
 
         return new LlmToolDefinition(
             "get_polyline_vertices",
-            "Получить координаты вершин полилинии и вернуть их в формате JSON.",
+            "Получить координаты вершин выбранной полилинии и вернуть их в формате JSON.",
             schema);
     }
 
