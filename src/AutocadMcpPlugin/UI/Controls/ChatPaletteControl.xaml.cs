@@ -1,3 +1,5 @@
+﻿using System;
+using System.Windows;
 using System.Windows.Controls;
 using AutocadMcpPlugin.UI.ViewModels;
 
@@ -13,9 +15,16 @@ public partial class ChatPaletteControl : UserControl
         InitializeComponent();
     }
 
+    public event EventHandler? SettingsRequested;
+
     public ChatViewModel? ViewModel
     {
         get => DataContext as ChatViewModel;
         set => DataContext = value;
+    }
+
+    private void OnSettingsClicked(object sender, RoutedEventArgs e)
+    {
+        SettingsRequested?.Invoke(this, EventArgs.Empty);
     }
 }

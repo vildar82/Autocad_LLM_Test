@@ -1,8 +1,9 @@
 using System;
-using Autodesk.AutoCAD.Windows;
 using AutocadMcpPlugin.Infrastructure.DependencyInjection;
 using AutocadMcpPlugin.UI.Controls;
 using AutocadMcpPlugin.UI.ViewModels;
+using AutocadMcpPlugin.UI.Windows;
+using Autodesk.AutoCAD.Windows;
 
 namespace AutocadMcpPlugin.UI;
 
@@ -14,6 +15,7 @@ public sealed class ChatPaletteHost : IDisposable
     private static ChatPaletteHost? _instance;
     private readonly PaletteSet _paletteSet;
     private readonly ChatPaletteControl _control;
+    private SettingsWindow? _settingsWindow;
     private bool _disposed;
 
     private ChatPaletteHost()
@@ -22,6 +24,7 @@ public sealed class ChatPaletteHost : IDisposable
         {
             ViewModel = PluginServiceProvider.GetRequiredService<ChatViewModel>()
         };
+        _control.SettingsRequested += OnSettingsRequested;
 
         _paletteSet = new PaletteSet("MCP Assistant")
         {
@@ -34,7 +37,13 @@ public sealed class ChatPaletteHost : IDisposable
         _paletteSet.AddVisual("Chat", _control);
     }
 
-    public static ChatPaletteHost Instance => _instance ??= new ChatPaletteHost();
+    public static ChatPaletteHost Instance
+    {
+        get
+        {
+            return _instance ??= new ChatPaletteHost();
+        }
+    }
 
     public void Show()
     {
@@ -58,7 +67,36 @@ public sealed class ChatPaletteHost : IDisposable
             return;
 
         _disposed = true;
+        _control.SettingsRequested -= OnSettingsRequested;
         _control.ViewModel = null;
         _paletteSet.Dispose();
+
+        if (_settingsWindow != null)
+        {
+            _settingsWindow.Close();
+            _settingsWindow = null;
+        }
+    }
+
+    private void OnSettingsRequested(object? sender, EventArgs e)
+    {
+        if (_disposed)
+            return;
+
+        if (_settingsWindow == null)
+        {
+            var viewModel = PluginServiceProvider.GetRequiredService<SettingsViewModel>();
+            _settingsWindow = new SettingsWindow
+            {
+                DataContext = viewModel,
+                Owner = System.Windows.Application.Current?.MainWindow
+            };
+            _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+            _settingsWindow.Show();
+        }
+        else
+        {
+            _settingsWindow.Activate();
+        }
     }
 }

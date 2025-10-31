@@ -5,6 +5,7 @@ using AutocadMcpPlugin.Application.Commands;
 using AutocadMcpPlugin.Application.Conversations;
 using AutocadMcpPlugin.Application.Llm;
 using AutocadMcpPlugin.Infrastructure.Configuration;
+using AutocadMcpPlugin.Infrastructure.Settings;
 using AutocadMcpPlugin.UI.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -62,8 +63,23 @@ public static class PluginServiceProvider
 
     private static void ConfigureServices(IServiceCollection services)
     {
-        var openAiSettings = new OpenAiSettings();
-        services.AddSingleton(openAiSettings);
+        services.AddSingleton<ISettingsService, JsonSettingsService>();
+
+        services.AddSingleton(provider =>
+        {
+            var settingsService = (JsonSettingsService)provider.GetRequiredService<ISettingsService>();
+            var openAiSettings = new OpenAiSettings
+            {
+                ApiKey = settingsService.Current.OpenAiApiKey
+            };
+
+            settingsService.SettingsSaved += (_, updatedSettings) =>
+            {
+                openAiSettings.ApiKey = updatedSettings.OpenAiApiKey;
+            };
+
+            return openAiSettings;
+        });
 
         services.AddSingleton(new HttpClient
         {
@@ -74,5 +90,6 @@ public static class PluginServiceProvider
         services.AddSingleton<IAutocadCommandExecutor, AutocadCommandExecutor>();
         services.AddSingleton<IConversationCoordinator, ConversationCoordinator>();
         services.AddSingleton<ChatViewModel>();
+        services.AddSingleton<SettingsViewModel>();
     }
 }

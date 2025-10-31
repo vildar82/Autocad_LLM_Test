@@ -1,16 +1,17 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using AutocadMcpPlugin;
 using AutocadMcpPlugin.Application.Commands;
 using AutocadMcpPlugin.Infrastructure.Configuration;
 
 namespace AutocadMcpPlugin.Application.Conversations;
 
 /// <summary>
-/// Координирует обработку пользовательских сообщений, AutoCAD-команд и запросов к LLM.
+/// Координирует обработку пользовательских сообщений, обращения к AutoCAD-командам и LLM.
 /// </summary>
 public sealed class ConversationCoordinator : IConversationCoordinator
 {
@@ -62,8 +63,9 @@ public sealed class ConversationCoordinator : IConversationCoordinator
 
         if (string.IsNullOrWhiteSpace(_settings.ApiKey))
         {
-            _history.Add(LlmMessage.CreateAssistant("Чтобы обратиться к языковой модели, задайте API-ключ OpenAI."));
-            return "Для подключения к ChatGPT укажите API-ключ OpenAI.";
+            const string messageNoKey = "Чтобы обратиться к языковой модели, задайте API-ключ OpenAI.";
+            _history.Add(LlmMessage.CreateAssistant(messageNoKey));
+            return messageNoKey;
         }
 
         var trimmedHistory = TrimHistory(_history);

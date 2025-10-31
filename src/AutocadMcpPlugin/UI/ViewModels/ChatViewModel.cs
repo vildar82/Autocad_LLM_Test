@@ -1,7 +1,7 @@
-using AutocadMcpPlugin;
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
+using AutocadMcpPlugin;
 using AutocadMcpPlugin.Application.Conversations;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -14,11 +14,16 @@ namespace AutocadMcpPlugin.UI.ViewModels;
 public sealed partial class ChatViewModel : ObservableObject
 {
     private readonly IConversationCoordinator _conversationCoordinator;
+    private readonly ISettingsService _settingsService;
 
-    public ChatViewModel(IConversationCoordinator conversationCoordinator)
+    public ChatViewModel(IConversationCoordinator conversationCoordinator, ISettingsService settingsService)
     {
         _conversationCoordinator = conversationCoordinator;
+        _settingsService = settingsService;
         Messages = [];
+
+        UpdateIdleStatus();
+        _settingsService.SettingsSaved += OnSettingsSaved;
     }
 
     public ObservableCollection<ChatMessage> Messages { get; }
@@ -32,7 +37,7 @@ public sealed partial class ChatViewModel : ObservableObject
     private bool _isBusy;
 
     [ObservableProperty]
-    private string? _statusMessage = "Готов к работе.";
+    private string? _statusMessage;
 
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
@@ -52,7 +57,7 @@ public sealed partial class ChatViewModel : ObservableObject
             var response = await _conversationCoordinator.ProcessUserMessageAsync(message);
             Messages.Add(new ChatMessage("Ассистент", response));
 
-            StatusMessage = "Готово.";
+            UpdateIdleStatus();
         }
         catch (Exception ex)
         {
@@ -66,4 +71,13 @@ public sealed partial class ChatViewModel : ObservableObject
     }
 
     private bool CanSend() => !IsBusy && !string.IsNullOrWhiteSpace(UserInput);
+
+    private void OnSettingsSaved(object? sender, PluginSettings settings) => UpdateIdleStatus();
+
+    private void UpdateIdleStatus()
+    {
+        StatusMessage = string.IsNullOrWhiteSpace(_settingsService.Current.OpenAiApiKey)
+            ? "LLM: укажите API-ключ в настройках."
+            : "Готов к работе.";
+    }
 }
