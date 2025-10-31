@@ -1,4 +1,4 @@
-﻿using Autodesk.AutoCAD.Runtime;
+using Autodesk.AutoCAD.Runtime;
 using AutocadMcpPlugin.Infrastructure.DependencyInjection;
 using AutocadMcpPlugin.UI;
 

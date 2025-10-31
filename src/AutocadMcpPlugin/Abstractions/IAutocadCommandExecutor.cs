@@ -1,7 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AutocadMcpPlugin.Application.Commands;
+namespace AutocadMcpPlugin;
 
 /// <summary>
 /// Выполняет команды построения примитивов в AutoCAD.

@@ -1,14 +1,16 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using AutocadMcpPlugin.Application.Commands;
+using AutocadMcpPlugin.Infrastructure.Configuration;
 
 namespace AutocadMcpPlugin.Application.Conversations;
 
 /// <summary>
-/// Координирует обработку пользовательских сообщений и запуск команд AutoCAD.
+/// Координирует обработку пользовательских сообщений, AutoCAD-команд и запросов к LLM.
 /// </summary>
 public sealed class ConversationCoordinator : IConversationCoordinator
 {
@@ -19,10 +21,22 @@ public sealed class ConversationCoordinator : IConversationCoordinator
     private static readonly Regex LineEndRegex = new(@"(до|в)\s*(?:точк\w*\s*)?\(?(?<x>-?\d+(?:[.,]\d+)?)\s*,\s*(?<y>-?\d+(?:[.,]\d+)?)\)?", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private readonly IAutocadCommandExecutor _commandExecutor;
+    private readonly ILlmClient _llmClient;
+    private readonly OpenAiSettings _settings;
+    private readonly List<LlmMessage> _history;
 
-    public ConversationCoordinator(IAutocadCommandExecutor commandExecutor)
+    public ConversationCoordinator(
+        IAutocadCommandExecutor commandExecutor,
+        ILlmClient llmClient,
+        OpenAiSettings settings)
     {
         _commandExecutor = commandExecutor;
+        _llmClient = llmClient;
+        _settings = settings;
+        _history = new List<LlmMessage>
+        {
+            LlmMessage.CreateSystem("Ты ассистент проектировщика AutoCAD. Если не можешь выполнить команду самостоятельно, дай понятный текстовый ответ.")
+        };
     }
 
     public async Task<string> ProcessUserMessageAsync(string message, CancellationToken cancellationToken = default)
@@ -30,19 +44,50 @@ public sealed class ConversationCoordinator : IConversationCoordinator
         if (string.IsNullOrWhiteSpace(message))
             return "Уточните запрос.";
 
+        _history.Add(LlmMessage.CreateUser(message));
+
         if (TryParseCircle(message, out var centerX, out var centerY, out var radius))
         {
             var result = await _commandExecutor.DrawCircleAsync(centerX, centerY, radius, cancellationToken);
+            _history.Add(LlmMessage.CreateAssistant(result.Message));
             return result.Message;
         }
 
         if (TryParseLine(message, out var startX, out var startY, out var endX, out var endY))
         {
             var result = await _commandExecutor.DrawLineAsync(startX, startY, endX, endY, cancellationToken);
+            _history.Add(LlmMessage.CreateAssistant(result.Message));
             return result.Message;
         }
 
-        return "Пока понимаю команды: круг (радиус + центр) и линия (от точки до точки). Попробуйте сформулировать запрос точнее.";
+        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
+        {
+            _history.Add(LlmMessage.CreateAssistant("Чтобы обратиться к языковой модели, задайте API-ключ OpenAI."));
+            return "Для подключения к ChatGPT укажите API-ключ OpenAI.";
+        }
+
+        var trimmedHistory = TrimHistory(_history);
+        var request = new LlmChatRequest(trimmedHistory);
+        var response = await _llmClient.CreateChatCompletionAsync(request, cancellationToken);
+
+        if (!response.IsSuccess)
+        {
+            var errorMessage = response.Error ?? "Не удалось получить ответ от LLM.";
+            _history.Add(LlmMessage.CreateAssistant(errorMessage));
+            return errorMessage;
+        }
+
+        _history.Add(LlmMessage.CreateAssistant(response.Content!));
+        return response.Content!;
+    }
+
+    private static IReadOnlyList<LlmMessage> TrimHistory(List<LlmMessage> history)
+    {
+        const int maxMessages = 20;
+        if (history.Count <= maxMessages)
+            return history;
+
+        return history.GetRange(history.Count - maxMessages, maxMessages);
     }
 
     private static bool TryParseCircle(string text, out double centerX, out double centerY, out double radius)

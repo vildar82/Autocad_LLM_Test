@@ -1,6 +1,10 @@
-﻿using System;
+using System;
+using System.Net.Http;
+using AutocadMcpPlugin;
 using AutocadMcpPlugin.Application.Commands;
 using AutocadMcpPlugin.Application.Conversations;
+using AutocadMcpPlugin.Application.Llm;
+using AutocadMcpPlugin.Infrastructure.Configuration;
 using AutocadMcpPlugin.UI.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -58,6 +62,15 @@ public static class PluginServiceProvider
 
     private static void ConfigureServices(IServiceCollection services)
     {
+        var openAiSettings = new OpenAiSettings();
+        services.AddSingleton(openAiSettings);
+
+        services.AddSingleton(new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(120)
+        });
+
+        services.AddSingleton<ILlmClient, OpenAiLlmClient>();
         services.AddSingleton<IAutocadCommandExecutor, AutocadCommandExecutor>();
         services.AddSingleton<IConversationCoordinator, ConversationCoordinator>();
         services.AddSingleton<ChatViewModel>();
