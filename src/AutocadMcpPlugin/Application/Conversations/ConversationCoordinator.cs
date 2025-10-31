@@ -34,6 +34,7 @@ public sealed class ConversationCoordinator(
         DrawObjectsToolDefinition(),
         GetObjectsToolDefinition(),
         DeleteObjectsToolDefinition(),
+        ExecuteLispToolDefinition(),
         GetPolylineToolDefinition()
     ];
 
@@ -105,6 +106,7 @@ public sealed class ConversationCoordinator(
                 "draw_objects" => ExecuteDrawObjects(toolCall),
                 "get_model_objects" => ExecuteGetModelObjects(),
                 "delete_objects" => ExecuteDeleteObjects(toolCall),
+                "execute_lisp" => ExecuteLisp(toolCall),
                 "get_polyline_vertices" => ExecuteGetPolylineVertices(toolCall),
                 _ => $"Неизвестный инструмент: {toolCall.Name}"
             };
@@ -231,6 +233,13 @@ public sealed class ConversationCoordinator(
         return FormatResult(result);
     }
 
+    private string ExecuteLisp(LlmToolCall toolCall)
+    {
+        var code = toolCall.Arguments.GetString("code");
+        var result = commandExecutor.ExecuteLisp(code);
+        return FormatResult(result);
+    }
+
     private string ExecuteGetPolylineVertices(LlmToolCall toolCall)
     {
         var result = commandExecutor.GetPolylineVertices();
@@ -277,9 +286,9 @@ public sealed class ConversationCoordinator(
         if (!string.IsNullOrWhiteSpace(result.Message))
             builder.AppendLine(result.Message);
 
-        builder.AppendLine("`json");
+        builder.AppendLine("```json");
         builder.AppendLine(result.Data);
-        builder.Append("`");
+        builder.Append("```");
         return builder.ToString();
     }
 
@@ -445,6 +454,28 @@ public sealed class ConversationCoordinator(
         return new LlmToolDefinition(
             "delete_objects",
             "Удалить объекты по их идентификаторам.",
+            schema);
+    }
+
+    private static LlmToolDefinition ExecuteLispToolDefinition()
+    {
+        var schema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            required = new[] { "code" },
+            properties = new
+            {
+                code = new
+                {
+                    type = "string",
+                    description = "AutoLISP-код, который нужно выполнить. При необходимости оборачивай команды в (progn ...)."
+                }
+            }
+        });
+
+        return new LlmToolDefinition(
+            "execute_lisp",
+            "Выполнить произвольный AutoLISP-код и вернуть результат выражения.",
             schema);
     }
 

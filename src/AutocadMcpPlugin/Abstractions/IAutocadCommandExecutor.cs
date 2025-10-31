@@ -30,5 +30,7 @@ public interface IAutocadCommandExecutor
     CommandExecutionResult DeleteObjects(
         IReadOnlyList<string> objectIds);
 
+    CommandExecutionResult ExecuteLisp(string code);
+
     CommandExecutionResult GetPolylineVertices();
 }

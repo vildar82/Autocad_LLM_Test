@@ -236,6 +236,42 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         return CommandExecutionResult.CreateSuccess(message.Trim(), payload);
     });
 
+    public CommandExecutionResult ExecuteLisp(string code) => ExecuteSafe((_, _) =>
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return CommandExecutionResult.CreateFailure("Передан пустой LISP-код.");
+
+        try
+        {
+            dynamic acadCom = AcadApplication.AcadApplication;
+            if (acadCom is null)
+                return CommandExecutionResult.CreateFailure("COM-интерфейс AutoCAD недоступен.");
+
+            object rawResult;
+            try
+            {
+                rawResult = acadCom.Eval(code);
+            }
+            catch (Exception ex)
+            {
+                return CommandExecutionResult.CreateFailure($"Ошибка выполнения LISP: {ex.Message}");
+            }
+
+            if (rawResult is null)
+                return CommandExecutionResult.CreateSuccess("LISP выполнен. Результат отсутствует.");
+
+            var payload = JsonSerializer.Serialize(
+                new { result = ConvertComLispResult(rawResult) },
+                new JsonSerializerOptions { WriteIndented = true });
+
+            return CommandExecutionResult.CreateSuccess("LISP выполнен.", payload);
+        }
+        catch (Exception ex)
+        {
+            return CommandExecutionResult.CreateFailure($"Не удалось выполнить LISP: {ex.Message}");
+        }
+    });
+
     public CommandExecutionResult GetPolylineVertices() => ExecuteSafe((_, doc) =>
     {
         var opt = new PromptEntityOptions("\nВыбери полилинию");
@@ -302,4 +338,19 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
     }
 
     private static string ToIdString(ObjectId objectId) => objectId.Handle.Value.ToString(CultureInfo.InvariantCulture);
+
+    private static object? ConvertComLispResult(object? value) =>
+        value switch
+        {
+            null => null,
+            double or float or int or long or short or bool or string => value,
+            Array array => array.Cast<object?>().Select(ConvertComLispResult).ToList(),
+            Point2d point2d => new { x = point2d.X, y = point2d.Y },
+            Point3d point3d => new { x = point3d.X, y = point3d.Y, z = point3d.Z },
+            Vector2d vector2d => new { x = vector2d.X, y = vector2d.Y },
+            Vector3d vector3d => new { x = vector3d.X, y = vector3d.Y, z = vector3d.Z },
+            ObjectId objectId => ToIdString(objectId),
+            Handle handle => handle.ToString(),
+            _ => value.ToString()
+        };
 }
