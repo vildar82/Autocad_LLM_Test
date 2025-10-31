@@ -459,6 +459,11 @@ public sealed class ConversationCoordinator(
 
     private static LlmToolDefinition ExecuteLispToolDefinition()
     {
+        // Описание инструмента формируется в формате JSON Schema (OpenAI function calling).
+        // Поле type задаёт тип корневого объекта, required перечисляет обязательные свойства,
+        // а секция properties описывает каждый аргумент (тип значения, текст подсказки и т.п.).
+        // LLM, увидев такую схему, знает, какие параметры ей нужно запросить у пользователя
+        // перед вызовом инструмента execute_lisp.
         var schema = JsonSerializer.SerializeToElement(new
         {
             type = "object",
