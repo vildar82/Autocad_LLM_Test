@@ -13,6 +13,7 @@ namespace AutocadLlmPlugin.UI;
 /// </summary>
 public sealed class ChatPaletteHost : IDisposable
 {
+    private const string PaletteGuis = "9e806ecf-db02-4dde-a4ea-77f8a34fe071";
     private static ChatPaletteHost? _instance;
     private readonly PaletteSet _paletteSet;
     private readonly ChatPaletteControl _control;
@@ -27,7 +28,7 @@ public sealed class ChatPaletteHost : IDisposable
         };
         _control.SettingsRequested += OnSettingsRequested;
 
-        _paletteSet = new PaletteSet("LLM Assistant")
+        _paletteSet = new PaletteSet("LLM Assistant", "LLMCHAT", Guid.Parse(PaletteGuis))
         {
             KeepFocus = false,
             Style = PaletteSetStyles.ShowAutoHideButton |

@@ -3,12 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
-using System.Runtime.InteropServices;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
-using Autodesk.AutoCAD.Runtime;
 using static AutocadLlmPlugin.CommandExecutionResult;
 using AcadApplication = Autodesk.AutoCAD.ApplicationServices.Application;
 
@@ -239,63 +237,15 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         return CreateSuccess(message.Trim(), payload);
     });
 
-        public CommandExecutionResult ExecuteLisp(string code) => ExecuteSafe((_, document) =>
+    public CommandExecutionResult ExecuteLisp(string code) => ExecuteSafe((_, document) =>
     {
         if (string.IsNullOrWhiteSpace(code))
             return CreateFailure("Передан пустой LISP-код.");
 
-        try
-        {
-            dynamic acadCom = AcadApplication.AcadApplication;
-            if (acadCom is null)
-            {
-                SendStringToExecute(document, code);
-                return CreateSuccess("LISP отправлен на выполнение через командную строку. Проверь вывод в AutoCAD.");
-            }
-
-            object? rawResult;
-            bool evalSucceeded;
-
-            try
-            {
-                rawResult = acadCom.Eval(code);
-                evalSucceeded = true;
-            }
-            catch (COMException)
-            {
-                try
-                {
-                    SystemObjects.DynamicLinker.LoadModule("acvba.arx", false, false);
-                    rawResult = acadCom.Eval(code);
-                    evalSucceeded = true;
-                }
-                catch (System.Exception retryEx)
-                {
-                    return CreateFailure(
-                        $"Не удалось выполнить LISP через Eval. {retryEx.Message}. " +
-                        "Убедись, что установлен VBA Enabler и загружен модуль ACVBA.ARX.");
-                }
-            }
-
-            if (!evalSucceeded)
-            {
-                SendStringToExecute(document, code);
-                return CreateSuccess("LISP отправлен на выполнение через командную строку. Проверь вывод в AutoCAD.");
-            }
-
-            if (rawResult is null)
-                return CreateSuccess("LISP выполнен. Результат отсутствует.");
-
-            var payload = JsonSerializer.Serialize(
-                new { result = ConvertComLispResult(rawResult) },
-                new JsonSerializerOptions { WriteIndented = true });
-
-            return CreateSuccess("LISP выполнен.", payload);
-        }
-        catch (System.Exception ex)
-        {
-            return CreateFailure($"Не удалось выполнить LISP: {ex.Message}");
-        }
+        SendStringToExecute(document, code);
+        return CreateSuccess(
+            "LISP отправлен на выполнение через командную строку. Проверь вывод в AutoCAD. " +
+            "Если нужен результат, выведи его через (princ) внутри кода.");
     });
 
     public CommandExecutionResult GetPolylineVertices() => ExecuteSafe((_, doc) =>
@@ -364,21 +314,6 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
     }
 
     private static string ToIdString(ObjectId objectId) => objectId.Handle.Value.ToString(CultureInfo.InvariantCulture);
-
-    private static object? ConvertComLispResult(object? value) =>
-        value switch
-        {
-            null => null,
-            double or float or int or long or short or bool or string => value,
-            Array array => array.Cast<object?>().Select(ConvertComLispResult).ToList(),
-            Point2d point2d => new { x = point2d.X, y = point2d.Y },
-            Point3d point3d => new { x = point3d.X, y = point3d.Y, z = point3d.Z },
-            Vector2d vector2d => new { x = vector2d.X, y = vector2d.Y },
-            Vector3d vector3d => new { x = vector3d.X, y = vector3d.Y, z = vector3d.Z },
-            ObjectId objectId => ToIdString(objectId),
-            Handle handle => handle.ToString(),
-            _ => value.ToString()
-        };
 
     private static void SendStringToExecute(Document document, string code)
     {
