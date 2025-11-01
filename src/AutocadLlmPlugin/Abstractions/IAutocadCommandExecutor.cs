@@ -32,5 +32,7 @@ public interface IAutocadCommandExecutor
 
     CommandExecutionResult ExecuteLisp(string code);
 
+    CommandExecutionResult ReadLispOutput();
+
     CommandExecutionResult GetPolylineVertices();
 }

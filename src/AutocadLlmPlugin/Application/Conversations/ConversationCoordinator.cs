@@ -35,6 +35,7 @@ public sealed class ConversationCoordinator(
         GetObjectsToolDefinition(),
         DeleteObjectsToolDefinition(),
         ExecuteLispToolDefinition(),
+        ReadLispOutputToolDefinition(),
         GetPolylineToolDefinition()
     ];
 
@@ -107,7 +108,8 @@ public sealed class ConversationCoordinator(
                 "get_model_objects" => ExecuteGetModelObjects(),
                 "delete_objects" => ExecuteDeleteObjects(toolCall),
                 "execute_lisp" => ExecuteLisp(toolCall),
-                "get_polyline_vertices" => ExecuteGetPolylineVertices(toolCall),
+                "read_lisp_output" => ExecuteReadLispOutput(),
+                "get_polyline_vertices" => ExecuteGetPolylineVertices(),
                 _ => $"Неизвестный инструмент: {toolCall.Name}"
             };
         }
@@ -240,7 +242,13 @@ public sealed class ConversationCoordinator(
         return FormatResult(result);
     }
 
-    private string ExecuteGetPolylineVertices(LlmToolCall toolCall)
+    private string ExecuteReadLispOutput()
+    {
+        var result = commandExecutor.ReadLispOutput();
+        return FormatResult(result);
+    }
+
+    private string ExecuteGetPolylineVertices()
     {
         var result = commandExecutor.GetPolylineVertices();
         return FormatResult(result);
@@ -480,7 +488,17 @@ public sealed class ConversationCoordinator(
 
         return new LlmToolDefinition(
             "execute_lisp",
-            "Выполнить произвольный AutoLISP-код и возвращает результат выражения.",
+            "Выполнить произвольный AutoLISP-код. После завершения вызови read_lisp_output, чтобы получить результат.",
+            schema);
+    }
+
+    private static LlmToolDefinition ReadLispOutputToolDefinition()
+    {
+        var schema = JsonSerializer.SerializeToElement(new { });
+
+        return new LlmToolDefinition(
+            "read_lisp_output",
+            "Прочитать содержимое lisp-output.txt (результат последнего запуска LISP). Повтори вызов, если файл ещё не создан.",
             schema);
     }
 

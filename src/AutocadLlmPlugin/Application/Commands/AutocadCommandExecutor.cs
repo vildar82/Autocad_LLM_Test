@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -237,16 +239,53 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         return CreateSuccess(message.Trim(), payload);
     });
 
-    public CommandExecutionResult ExecuteLisp(string code) => ExecuteSafe((_, document) =>
+    public CommandExecutionResult ExecuteLisp(string code)
     {
         if (string.IsNullOrWhiteSpace(code))
             return CreateFailure("Передан пустой LISP-код.");
 
-        SendStringToExecute(document, code);
+        var document = AcadApplication.DocumentManager.MdiActiveDocument;
+        if (document is null)
+            return CreateFailure("Активный документ AutoCAD не найден.");
+
+        var outputPath = PrepareLispOutputPath();
+        var wrappedCode = BuildWrappedLisp(code, outputPath);
+        document.SendStringToExecute(wrappedCode, false, false, true);
+
         return CreateSuccess(
-            "LISP отправлен на выполнение через командную строку. Проверь вывод в AutoCAD. " +
-            "Если нужен результат, выведи его через (princ) внутри кода.");
-    });
+            "LISP отправлен на выполнение. Чтобы получить результат, вызови инструмент read_lisp_output после завершения.\n" +
+            "Для вывода данных используйте (princ) или верните значение последним выражением.");
+    }
+
+    public CommandExecutionResult ReadLispOutput()
+    {
+        var outputPath = GetLispOutputPath();
+
+        if (!File.Exists(outputPath))
+            return CreateFailure("Файл lisp-output.txt ещё не создан. Повтори запрос позже.");
+
+        try
+        {
+            var text = File.ReadAllText(outputPath, Encoding.Default).Trim();
+            File.Delete(outputPath);
+
+            if (string.IsNullOrEmpty(text))
+                return CreateSuccess("Файл результата пуст.");
+
+            if (text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
+                return CreateFailure(text);
+
+            var payload = JsonSerializer.Serialize(
+                new { output = text },
+                new JsonSerializerOptions { WriteIndented = true });
+
+            return CreateSuccess("Результат LISP получен.", payload);
+        }
+        catch (IOException ex)
+        {
+            return CreateFailure($"Не удалось прочитать результат LISP: {ex.Message}");
+        }
+    }
 
     public CommandExecutionResult GetPolylineVertices() => ExecuteSafe((_, doc) =>
     {
@@ -314,6 +353,56 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
     }
 
     private static string ToIdString(ObjectId objectId) => objectId.Handle.Value.ToString(CultureInfo.InvariantCulture);
+
+    private static string PrepareLispOutputPath()
+    {
+        var path = GetLispOutputPath();
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (IOException)
+        {
+            // файл мог отсутствовать или быть заблокирован предыдущим запуском
+        }
+
+        return path;
+    }
+
+    private static string GetLispOutputPath()
+    {
+        var directory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "AutocadLlmPlugin");
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, "lisp-output.txt");
+    }
+
+    private static string BuildWrappedLisp(string userCode, string outputPath)
+    {
+        var escapedPath = outputPath.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        var builder = new StringBuilder();
+        builder.AppendLine("(progn");
+        builder.AppendLine("  (vl-load-com)");
+        builder.AppendLine("  (defun _llm-write (value)");
+        builder.AppendLine($"    (setq __file (open \"{escapedPath}\" \"w\"))");
+        builder.AppendLine("    (if __file");
+        builder.AppendLine("      (progn");
+        builder.AppendLine("        (write-line (vl-princ-to-string value) __file)");
+        builder.AppendLine("        (close __file))))");
+        builder.AppendLine("  (setq __llm-result");
+        builder.AppendLine("        (vl-catch-all-apply");
+        builder.AppendLine("          (function (lambda ()");
+        builder.Append("            ");
+        builder.AppendLine(userCode);
+        builder.AppendLine("          ))))");
+        builder.AppendLine("  (if (vl-catch-all-error-p __llm-result)");
+        builder.AppendLine("      (_llm-write (strcat \"ERROR: \" (vl-catch-all-error-message __llm-result)))");
+        builder.AppendLine("      (_llm-write __llm-result))");
+        builder.AppendLine("  (princ))");
+        return builder.ToString();
+    }
 
     private static void SendStringToExecute(Document document, string code)
     {

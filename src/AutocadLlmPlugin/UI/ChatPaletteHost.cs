@@ -28,7 +28,7 @@ public sealed class ChatPaletteHost : IDisposable
         };
         _control.SettingsRequested += OnSettingsRequested;
 
-        _paletteSet = new PaletteSet("LLM Assistant", "LLMCHAT", Guid.Parse(PaletteGuis))
+        _paletteSet = new PaletteSet("LLM Assistant", Guid.Parse(PaletteGuis))
         {
             KeepFocus = false,
             Style = PaletteSetStyles.ShowAutoHideButton |
