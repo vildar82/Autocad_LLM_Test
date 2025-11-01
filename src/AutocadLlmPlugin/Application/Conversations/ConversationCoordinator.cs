@@ -473,14 +473,14 @@ public sealed class ConversationCoordinator(
                 code = new
                 {
                     type = "string",
-                    description = "AutoLISP-код, который нужно выполнить. При необходимости оборачивай команды в (progn ...)."
+                    description = "AutoLISP-код, который нужно выполнить. При необходимости оборачивай команды в (progn ...). Возвращается результат выражения."
                 }
             }
         });
 
         return new LlmToolDefinition(
             "execute_lisp",
-            "Выполнить произвольный AutoLISP-код и вернуть результат выражения.",
+            "Выполнить произвольный AutoLISP-код и возвращает результат выражения.",
             schema);
     }
 

@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using System.Runtime.InteropServices;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
+using Autodesk.AutoCAD.Runtime;
+using static AutocadLlmPlugin.CommandExecutionResult;
 using AcadApplication = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace AutocadLlmPlugin.Application.Commands;
@@ -32,7 +35,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
             radius
         });
 
-        return CommandExecutionResult.CreateSuccess(
+        return CreateSuccess(
             $"Круг радиусом {radius.ToString("G", CultureInfo.InvariantCulture)} построен.",
             payload);
     });
@@ -53,7 +56,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
             end = new { x = endX, y = endY }
         });
 
-        return CommandExecutionResult.CreateSuccess("Отрезок построен.", payload);
+        return CreateSuccess("Отрезок построен.", payload);
     });
 
     public CommandExecutionResult DrawPolyline(
@@ -61,7 +64,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         bool closed) => ExecuteSafe((modelSpace, _) =>
     {
         if (vertices.Count < 2)
-            return CommandExecutionResult.CreateFailure("Нужно указать минимум две вершины полилинии.");
+            return CreateFailure("Нужно указать минимум две вершины полилинии.");
 
         var polyline = new Polyline();
         polyline.SetDatabaseDefaults();
@@ -88,7 +91,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
             })
         });
 
-        return CommandExecutionResult.CreateSuccess(
+        return CreateSuccess(
             $"Полилиния построена. Вершин: {vertices.Count}.",
             payload);
     });
@@ -96,7 +99,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
     public CommandExecutionResult DrawObjects(IReadOnlyList<DrawingObjectRequest> objects)
     {
         if (objects.Count == 0)
-            return CommandExecutionResult.CreateFailure("Список объектов для построения пуст.");
+            return CreateFailure("Список объектов для построения пуст.");
 
         var createdObjects = new List<object>();
         foreach (var request in objects)
@@ -106,7 +109,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
                 DrawingObjectKind.Circle => DrawCircle(request.Circle!.CenterX, request.Circle.CenterY, request.Circle.Radius),
                 DrawingObjectKind.Line => DrawLine(request.Line!.StartX, request.Line.StartY, request.Line.EndX, request.Line.EndY),
                 DrawingObjectKind.Polyline => DrawPolyline(request.Polyline!.Vertices, request.Polyline.Closed),
-                _ => CommandExecutionResult.CreateFailure($"Неизвестный тип объекта: {request.Kind}.")
+                _ => CreateFailure($"Неизвестный тип объекта: {request.Kind}.")
             };
 
             if (!result.IsSuccess)
@@ -122,7 +125,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
             created = createdObjects
         });
 
-        return CommandExecutionResult.CreateSuccess("Объекты построены.", payload);
+        return CreateSuccess("Объекты построены.", payload);
     }
 
     public CommandExecutionResult GetModelObjects() => ExecuteSafe((modelSpace, _) =>
@@ -177,13 +180,13 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
             ? "В модели нет поддерживаемых объектов."
             : $"Найдено объектов: {objects.Count}.";
 
-        return CommandExecutionResult.CreateSuccess(message, payload);
+        return CreateSuccess(message, payload);
     }, requiresWrite: false);
 
     public CommandExecutionResult DeleteObjects(IReadOnlyList<string> objectIds) => ExecuteSafe((modelSpace, _) =>
     {
         if (objectIds.Count == 0)
-            return CommandExecutionResult.CreateFailure("Не переданы идентификаторы для удаления.");
+            return CreateFailure("Не переданы идентификаторы для удаления.");
 
         var deleted = new List<string>();
         var notFound = new List<string>();
@@ -233,42 +236,65 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         if (notFound.Count > 0)
             message += $" Не найдены: {string.Join(", ", notFound)}.";
 
-        return CommandExecutionResult.CreateSuccess(message.Trim(), payload);
+        return CreateSuccess(message.Trim(), payload);
     });
 
-    public CommandExecutionResult ExecuteLisp(string code) => ExecuteSafe((_, _) =>
+        public CommandExecutionResult ExecuteLisp(string code) => ExecuteSafe((_, document) =>
     {
         if (string.IsNullOrWhiteSpace(code))
-            return CommandExecutionResult.CreateFailure("Передан пустой LISP-код.");
+            return CreateFailure("Передан пустой LISP-код.");
 
         try
         {
             dynamic acadCom = AcadApplication.AcadApplication;
             if (acadCom is null)
-                return CommandExecutionResult.CreateFailure("COM-интерфейс AutoCAD недоступен.");
+            {
+                SendStringToExecute(document, code);
+                return CreateSuccess("LISP отправлен на выполнение через командную строку. Проверь вывод в AutoCAD.");
+            }
 
-            object rawResult;
+            object? rawResult;
+            bool evalSucceeded;
+
             try
             {
                 rawResult = acadCom.Eval(code);
+                evalSucceeded = true;
             }
-            catch (Exception ex)
+            catch (COMException)
             {
-                return CommandExecutionResult.CreateFailure($"Ошибка выполнения LISP: {ex.Message}");
+                try
+                {
+                    SystemObjects.DynamicLinker.LoadModule("acvba.arx", false, false);
+                    rawResult = acadCom.Eval(code);
+                    evalSucceeded = true;
+                }
+                catch (System.Exception retryEx)
+                {
+                    return CreateFailure(
+                        $"Не удалось выполнить LISP через Eval. {retryEx.Message}. " +
+                        "Убедись, что установлен VBA Enabler и загружен модуль ACVBA.ARX.");
+                }
+            }
+
+            if (!evalSucceeded)
+            {
+                SendStringToExecute(document, code);
+                return CreateSuccess("LISP отправлен на выполнение через командную строку. Проверь вывод в AutoCAD.");
             }
 
             if (rawResult is null)
-                return CommandExecutionResult.CreateSuccess("LISP выполнен. Результат отсутствует.");
+                return CreateSuccess("LISP выполнен. Результат отсутствует.");
 
             var payload = JsonSerializer.Serialize(
                 new { result = ConvertComLispResult(rawResult) },
                 new JsonSerializerOptions { WriteIndented = true });
 
-            return CommandExecutionResult.CreateSuccess("LISP выполнен.", payload);
+            return CreateSuccess("LISP выполнен.", payload);
         }
-        catch (Exception ex)
+        catch (System.Exception ex)
         {
-            return CommandExecutionResult.CreateFailure($"Не удалось выполнить LISP: {ex.Message}");
+            return CreateFailure($"Не удалось выполнить LISP: {ex.Message}");
         }
     });
 
@@ -279,7 +305,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         opt.AddAllowedClass(typeof(Polyline), true);
         var res = doc.Editor.GetEntity(opt);
         if (res.Status != PromptStatus.OK)
-            return CommandExecutionResult.CreateFailure("Полилиния не выбрана");
+            return CreateFailure("Полилиния не выбрана");
 
         var polyline = (Polyline)res.ObjectId.GetObject(OpenMode.ForRead, false, true);
         var vertices = new List<object>(polyline.NumberOfVertices);
@@ -304,7 +330,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
             vertices
         }, new JsonSerializerOptions { WriteIndented = true });
 
-        return CommandExecutionResult.CreateSuccess("Данные полилинии получены.", payload);
+        return CreateSuccess("Данные полилинии получены.", payload);
     }, requiresWrite: false);
 
     private static CommandExecutionResult ExecuteSafe(
@@ -315,7 +341,7 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         {
             var document = AcadApplication.DocumentManager.MdiActiveDocument;
             if (document is null)
-                return CommandExecutionResult.CreateFailure("Активный документ AutoCAD не найден.");
+                return CreateFailure("Активный документ AutoCAD не найден.");
 
             using var lockDocument = document.LockDocument();
             var database = document.Database;
@@ -329,11 +355,11 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
         }
         catch (Autodesk.AutoCAD.Runtime.Exception autocadException)
         {
-            return CommandExecutionResult.CreateFailure($"Ошибка AutoCAD: {autocadException.Message}");
+            return CreateFailure($"Ошибка AutoCAD: {autocadException.Message}");
         }
-        catch (Exception ex)
+        catch (System.Exception ex)
         {
-            return CommandExecutionResult.CreateFailure($"Не удалось выполнить команду: {ex.Message}");
+            return CreateFailure($"Не удалось выполнить команду: {ex.Message}");
         }
     }
 
@@ -353,4 +379,13 @@ public sealed class AutocadCommandExecutor : IAutocadCommandExecutor
             Handle handle => handle.ToString(),
             _ => value.ToString()
         };
+
+    private static void SendStringToExecute(Document document, string code)
+    {
+        var command = code.EndsWith("\n", StringComparison.Ordinal)
+            ? code
+            : code + "\n";
+
+        document.SendStringToExecute(command, false, false, true);
+    }
 }
